@@ -1,0 +1,16 @@
+"Id";"Designator";"Footprint";"Quantity";"Designation";"Supplier and ref";
+1;"R5";"R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal";1;"82";;;
+2;"J1,J3";"RFSOLUTIONS_CON-SMA-EDGE-S";2;"CON-SMA-EDGE-S";;;
+3;"R7";"R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal";1;"39";;;
+4;"J6,J8,J7";"PHOENIX_1888687";3;"1888687";;;
+5;"A1";"Arduino_Nano";1;"Arduino_Nano_Every";;;
+6;"U3";"DIP794W45P254L959H508Q8";1;"OP07CP";;;
+7;"R6";"R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal";1;"1.8";;;
+8;"R3";"R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal";1;"100";;;
+9;"J2";"PHOENIX_MKDS_3_4-5_08";1;"MKDS_3__4-5_08";;;
+10;"U1";"TO-92_Inline";1;"TL431LP";;;
+11;"R2";"R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal";1;"10000";;;
+12;"R1";"R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal";1;"1000";;;
+13;"D1";"C_Disc_D7.5mm_W5.0mm_P7.50mm";1;"D_Capacitance";;;
+14;"Q2";"TO254P1016X419X2286-3";1;"IRFZ44N";;;
+15;"R4";"R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal";1;"2.7";;;
