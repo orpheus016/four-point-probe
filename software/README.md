@@ -1,0 +1,69 @@
+Four-point probe voltage simulation and snapshot capture.
+
+## What is this
+This folder contains a modular Python simulation that mimics four-point probe voltage
+measurements. It generates a true voltage from current and resistance, applies realistic
+transient response and noise, and then detects when the signal stabilizes so it can
+capture a frozen snapshot of the measurement.
+
+## File overview
+- config.py
+   - Simulation defaults and tunables (current, resistance, noise, transient model,
+      snapshot thresholds).
+- data_source.py
+   - Voltage model and generator.
+   - V_true = I_source * R_sample, then applies transient response, noise, drift,
+      line interference, and ADC quantization.
+- filters.py
+   - Moving average and optional low-pass filtering.
+- main.py
+   - Orchestrates sampling, filtering, snapshot detection, plotting, and logging.
+   - This is where the core snapshot logic lives.
+- visualization.py
+   - Live plot with comparison (true vs snapshot) or full history mode.
+- logger.py
+   - CSV logging for measured, true, and snapshot values.
+- volt_meas.py
+   - Thin entry-point wrapper that calls main().
+
+## Run from repo root
+1. Baseline run for later integration into the full FPP software:
+    `python -m software.main --current 0.01 --resistance 1.5 --tau 0.4 --transient-model underdamped --damping 0.35 --line-freq 60 --snapshot-threshold 0.0004 --snapshot-window 2.0 --snapshot-min-duration 2.0 --low-pass --low-pass-alpha 0.1`
+2. Verify continuous graph and snapshot updates:
+    `python -m software.main --snapshot-mode continuous --no-stop-on-snapshot --plot-mode full`
+
+## Snapshot function: where it is and how it works
+The core snapshot behavior is implemented in main.py inside the main loop:
+- Rolling buffer collects filtered voltages.
+- A rolling stddev check decides when the signal is stable.
+- When stable long enough, a snapshot voltage is captured and frozen.
+- If stop-on-snapshot is enabled, the loop exits and a final comparison view is shown.
+
+Key variables to look for in main.py:
+- snapshot_buffer
+- compute_mean_std(...)
+- snapshot_value
+- stable_samples and min_stable_samples
+
+## How to integrate snapshot into the larger FPP software
+Use this as the reference pipeline:
+1. Identify your measured voltage stream (raw or filtered).
+2. Insert a rolling buffer and stddev check (see compute_mean_std in main.py).
+3. When stddev <= threshold for a minimum duration, compute a snapshot value.
+4. Freeze the snapshot and stop acquisition if desired.
+5. Display the snapshot next to the true/reference value.
+
+Suggested integration steps:
+1. Port the snapshot block from main.py into your acquisition loop.
+2. Feed the block with filtered voltage for better stability.
+3. Keep the parameters configurable:
+    - snapshot_window_s
+    - snapshot_std_threshold_v
+    - snapshot_min_duration_s
+4. Use stop-on-snapshot when you want a one-shot measurement.
+5. For continuous monitoring, switch to snapshot-mode continuous.
+
+## Common tuning tips
+- If snapshot never triggers, increase snapshot threshold or enable low-pass filtering.
+- If snapshot triggers too early, increase snapshot window or min duration.
+- For noisy environments, use a lower low-pass alpha (e.g., 0.05 to 0.2).
