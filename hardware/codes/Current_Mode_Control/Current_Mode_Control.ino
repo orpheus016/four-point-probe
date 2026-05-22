@@ -5,12 +5,12 @@
     LOW  = Relay OFF
 
   Relay topology:
-    Pin25 = Base/default path
-    Pin24 = Stage 1
-    Pin23 = Stage 2
-    Pin22 = Stage 3
+    Pin5 = Base/default path
+    Pin4 = Stage 1
+    Pin3 = Stage 2
+    Pin2 = Stage 3
 
-  Thresholds:
+  Thresholds [PLACEHOLDER]:
     R <= 12.7553          -> Stage 0 (Pin25)
     12.7553 < R <= 35.6846 -> Stage 1 (Pin24)
     35.6846 < R <= 79.9224 -> Stage 2 (Pin23)
@@ -34,10 +34,10 @@
 */
 
 const int relayPins[4] = {
-  25, // Stage 0
-  24, // Stage 1
-  23, // Stage 2
-  22  // Stage 3
+  5, // Stage 0, di mega 25,24,23,22
+  4, // Stage 1
+  3, // Stage 2
+  2  // Stage 3
 };
 
 const int RELAY_ON  = HIGH;
@@ -54,7 +54,7 @@ int currentStage = 0;
 float resistanceValue = 0.0;
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   for (int i = 0; i < 4; i++) {
     pinMode(relayPins[i], OUTPUT);

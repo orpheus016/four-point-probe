@@ -1,4 +1,9 @@
 """Serial acquisition and snapshot handoff for the Instrument firmware."""
+
+'''
+only for reference to be integrated into the main data source module, not meant to be run standalone.
+'''
+
 import serial
 import time
 

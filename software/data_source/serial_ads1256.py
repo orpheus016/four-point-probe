@@ -1,3 +1,7 @@
+'''
+reference instrument_meas.py logic into this functionalitys
+'''
+
 """Voltage data sources: simulated and (future) ADS1256 serial input."""
 
 from __future__ import annotations
@@ -7,7 +11,7 @@ import random
 from dataclasses import dataclass
 from typing import Iterator
 
-from .config import SerialConfig, SimulationConfig
+from ..config.config import SerialConfig, SimulationConfig
 
 
 @dataclass(frozen=True)

@@ -9,11 +9,11 @@ from collections import deque
 from datetime import datetime
 from typing import Deque, Optional
 
-from .config import SerialConfig, SimulationConfig
-from .data_source import VoltageSample, dummy_voltage_generator, serial_ads1256_reader
-from .filters import LowPassFilter, MovingAverageFilter
-from .logger import CsvLogger
-from .visualization import LivePlot
+from .config.config import SerialConfig, SimulationConfig
+from .data_source.serial_ads1256 import VoltageSample, dummy_voltage_generator, serial_ads1256_reader
+from .utils.filters import LowPassFilter, MovingAverageFilter
+from .utils.logger import CsvLogger
+from .utils.visualization import LivePlot
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
