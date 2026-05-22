@@ -1,5 +1,9 @@
 """Configuration defaults for voltage simulation and streaming."""
 
+'''
+move arguments from main to config
+'''
+
 from dataclasses import dataclass
 
 
@@ -29,6 +33,6 @@ class SimulationConfig:
 
 @dataclass(frozen=True)
 class SerialConfig:
-    port: str = "COM3"
+    port: str = "COM12"
     baud_rate: int = 115200
     timeout_s: float = 1.0
