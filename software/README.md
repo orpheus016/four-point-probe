@@ -68,10 +68,21 @@ Suggested integration steps:
 - If snapshot triggers too early, increase snapshot window or min duration.
 - For noisy environments, use a lower low-pass alpha (e.g., 0.05 to 0.2).
 
-## Capture Data Manually
+## Capture Data
+
+### Manual Capture
+
 ```bash
 # Execute with default config settings (COM12, 115200 baud)
 python -m software.data_source.manual_capture
 # Override targets using the integrated arg_parser flags
 python -m software.data_source.manual_capture --port COM5 --baud 115200 --filename step_response_test
 ```
+
+You might want to use manual capture to test the VI capture algorithm on specific datasets, or to collect custom datasets for testing and development. Alternatively, you can use the algorithmic based data_source to generate synthetic data with specific characteristics (e.g. noise, transient response, line interference) to test the snapshot algorithm under controlled conditions.
+
+Use the csv_replay generator to replay existing datasets in the same format as the ads1256 reader, which is what the snapshot algorithm is currently built and tested on.
+
+### Auto Capture
+
+You can use ads1256 capture for more automated data collection. this data_source is going to be integrated into the automated four point probe system measurement

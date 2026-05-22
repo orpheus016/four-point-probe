@@ -2,7 +2,7 @@
 
 from .ads1256 import ads1256_reader
 from ..utils.csv_replay import csv_replay_reader
-from .serial_commander import SerialCommander
+from ..command.serial_commander import SerialCommander
 from .settling import settling_signal_generator
 from .worst_case import worst_case_signal_generator
 

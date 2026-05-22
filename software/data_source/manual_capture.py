@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..config.config import build_arg_parser, build_serial_config, OutputConfig
-from .serial_commander import SerialCommander
+from ..command.serial_commander import SerialCommander
 
 def main():
     parser = build_arg_parser()

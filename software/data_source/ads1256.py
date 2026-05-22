@@ -7,7 +7,7 @@ from typing import Iterator
 
 from ..config.config import SerialConfig
 from ..utils.types import Sample
-from .serial_commander import SerialCommander
+from ..command.serial_commander import SerialCommander
 
 
 def ads1256_reader(config: SerialConfig, manage_current_switching: bool = True) -> Iterator[Sample]:
