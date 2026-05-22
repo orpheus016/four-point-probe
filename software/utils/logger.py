@@ -7,6 +7,8 @@ import os
 from datetime import datetime
 from typing import Optional
 
+from .types import Snapshot
+
 
 class CsvLogger:
     """Append timestamped voltage samples to a CSV file."""
@@ -19,32 +21,30 @@ class CsvLogger:
         self._path = os.path.join(output_dir, filename)
         self._file = open(self._path, "w", newline="", encoding="utf-8")
         self._writer = csv.writer(self._file)
-        self._writer.writerow(["timestamp", "elapsed_s", "measured_v", "true_v", "snapshot_v", "mean_v", "rms_v"])
+        self._writer.writerow(["timestamp", "elapsed_s", "measured_v", "current_mA", "resistance", "std_dev", "stage"])
         self._line_count = 0
 
     @property
     def path(self) -> str:
         return self._path
 
-    def log(
+    def log_sample(
         self,
         timestamp: datetime,
         elapsed_s: float,
         measured_v: float,
-        true_v: float,
-        snapshot_v: Optional[float],
-        mean: Optional[float],
-        rms: Optional[float],
+        current_mA: float,
+        snapshot: Optional[Snapshot] = None,
     ) -> None:
         self._writer.writerow(
             [
                 timestamp.isoformat(timespec="milliseconds"),
                 f"{elapsed_s:.6f}",
                 f"{measured_v:.8f}",
-                f"{true_v:.8f}",
-                "" if snapshot_v is None else f"{snapshot_v:.8f}",
-                "" if mean is None else f"{mean:.8f}",
-                "" if rms is None else f"{rms:.8f}",
+                f"{current_mA:.8f}",
+                "" if snapshot is None or snapshot.resistance is None else f"{snapshot.resistance:.8f}",
+                "" if snapshot is None or snapshot.std_dev is None else f"{snapshot.std_dev:.8f}",
+                "" if snapshot is None or snapshot.stage is None else snapshot.stage,
             ]
         )
         self._line_count += 1

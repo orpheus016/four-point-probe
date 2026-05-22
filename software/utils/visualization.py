@@ -39,7 +39,7 @@ class LivePlot:
         self,
         t_s: float,
         measured_v: float,
-        true_v: float,
+        true_v: Optional[float],
         snapshot_v: Optional[float],
         mean: Optional[float],
         rms: Optional[float],
@@ -51,10 +51,13 @@ class LivePlot:
         if self._plot_mode == "full":
             self._times.append(t_s)
             self._measured.append(measured_v)
-            self._true.append(true_v)
-
             self._measured_line.set_data(self._times, self._measured)
-            self._true_line.set_data(self._times, self._true)
+
+            if true_v is not None:
+                self._true.append(true_v)
+                self._true_line.set_data(self._times, self._true)
+            else:
+                self._true_line.set_data([], [])
 
             if snapshot_v is not None:
                 x_min = max(0.0, t_s - self._window_seconds)
@@ -67,8 +70,12 @@ class LivePlot:
             self._ax.set_xlim(x_min, x_max)
 
             if self._measured:
-                v_min = min(min(self._measured), min(self._true))
-                v_max = max(max(self._measured), max(self._true))
+                if self._true:
+                    v_min = min(min(self._measured), min(self._true))
+                    v_max = max(max(self._measured), max(self._true))
+                else:
+                    v_min = min(self._measured)
+                    v_max = max(self._measured)
                 margin = (v_max - v_min) * 0.1 if v_max != v_min else 1e-6
                 self._ax.set_ylim(v_min - margin, v_max + margin)
         else:
@@ -87,13 +94,13 @@ class LivePlot:
         self._fig.canvas.flush_events()
         plt.pause(0.001)
 
-    def show_final_comparison(self, true_v: float, snapshot_v: Optional[float]) -> None:
+    def show_final_comparison(self, true_v: Optional[float], snapshot_v: Optional[float]) -> None:
         self._plot_mode = "comparison"
         self._render_comparison(true_v, snapshot_v)
         plt.ioff()
         plt.show(block=True)
 
-    def _render_comparison(self, true_v: float, snapshot_v: Optional[float]) -> None:
+    def _render_comparison(self, true_v: Optional[float], snapshot_v: Optional[float]) -> None:
         if snapshot_v is None:
             self._measured_line.set_data([], [])
             self._snapshot_line.set_data([], [])
@@ -105,11 +112,18 @@ class LivePlot:
         self._ax.set_xlim(x_min, x_max)
 
         self._measured_line.set_data([], [])
-        self._true_line.set_data([x_min, x_max], [true_v, true_v])
+        if true_v is not None:
+            self._true_line.set_data([x_min, x_max], [true_v, true_v])
+        else:
+            self._true_line.set_data([], [])
         self._snapshot_line.set_data([x_min, x_max], [snapshot_v, snapshot_v])
 
-        v_min = min(true_v, snapshot_v)
-        v_max = max(true_v, snapshot_v)
+        if true_v is not None:
+            v_min = min(true_v, snapshot_v)
+            v_max = max(true_v, snapshot_v)
+        else:
+            v_min = snapshot_v
+            v_max = snapshot_v
         margin = (v_max - v_min) * 0.1 if v_max != v_min else 1e-6
         self._ax.set_ylim(v_min - margin, v_max + margin)
 
