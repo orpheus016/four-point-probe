@@ -11,7 +11,7 @@ from typing import Deque, Optional
 from .backbones.stddev_window import StdDevWindowBackbone
 from .config.config import build_arg_parser, build_serial_config, build_simulation_config
 from .data_source.ads1256 import ads1256_reader
-from .data_source.csv_replay import csv_replay_reader
+from .utils.csv_replay import csv_replay_reader
 from .data_source.dummy import dummy_voltage_generator
 from .data_source.settling import settling_signal_generator
 from .data_source.worst_case import worst_case_signal_generator

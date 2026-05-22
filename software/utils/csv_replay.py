@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Iterator
 
 from ..config.config import SimulationConfig
-from ..utils.types import Sample
+from .types import Sample
 
 
 def csv_replay_reader(csv_path: str, sample_rate_hz: float = SimulationConfig.sample_rate_hz) -> Iterator[Sample]:

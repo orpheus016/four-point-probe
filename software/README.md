@@ -67,3 +67,11 @@ Suggested integration steps:
 - If snapshot never triggers, increase snapshot threshold or enable low-pass filtering.
 - If snapshot triggers too early, increase snapshot window or min duration.
 - For noisy environments, use a lower low-pass alpha (e.g., 0.05 to 0.2).
+
+## Capture Data Manually
+```bash
+# Execute with default config settings (COM12, 115200 baud)
+python -m software.data_source.manual_capture
+# Override targets using the integrated arg_parser flags
+python -m software.data_source.manual_capture --port COM5 --baud 115200 --filename step_response_test
+```
