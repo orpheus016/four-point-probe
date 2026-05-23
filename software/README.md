@@ -7,24 +7,60 @@ transient response and noise, and then detects when the signal stabilizes so it 
 capture a frozen snapshot of the measurement.
 
 ## File overview
-- config.py
-   - Simulation defaults and tunables (current, resistance, noise, transient model,
-      snapshot thresholds).
-- data_source.py
-   - Voltage model and generator.
-   - V_true = I_source * R_sample, then applies transient response, noise, drift,
-      line interference, and ADC quantization.
-- filters.py
+- `config/config.py`
+   - CLI defaults and tunables for simulation, serial timing, switching policy, and output routing.
+- `backbones/base.py`
+   - Abstract streaming interface: `update(sample) -> Optional[Snapshot]`.
+- `backbones/stddev_window.py`
+   - Sliding-window stability detector with incremental variance.
+- `backbones/baseline.py`
+   - Baseline snapshot strategy built on the sliding-window stddev rule.
+- `backbones/hysteresis.py`
+   - Hysteresis snapshot strategy with enter/exit thresholds and dwell.
+- `command/serial_commander.py`
+   - Serial protocol state engine for ADS1256 hardware control and stage switching.
+- `data_source/ads1256.py`
+   - Hardware streaming generator for Arduino/ADS1256.
+- `data_source/dummy.py`
+   - Synthetic signal generator for smoke tests and local development.
+- `data_source/settling.py`
+   - Synthetic settling sequence for backbone testing.
+- `data_source/worst_case.py`
+   - Synthetic worst-case data source for stability experiments.
+- `data_source/manual_capture.py`
+   - Manual data-capture entrypoint.
+- `data_source/instrument_meas.py`
+   - Reference hardware capture example kept for comparison.
+- `utils/csv_replay.py`
+   - CSV replay generator for `voltage,current_mA` datasets.
+- `utils/backbone_factory.py`
+   - Shared backbone selection helper used by `main.py`, `scripts/evaluate.py`, and `scripts/integrate.py`.
+- `utils/filters.py`
    - Moving average and optional low-pass filtering.
-- main.py
-   - Orchestrates sampling, filtering, snapshot detection, plotting, and logging.
-   - Orchestration-only: snapshot strategies are implemented inside `backbones/`.
-- visualization.py
-   - Live plot with comparison (true vs snapshot) or full history mode.
-- logger.py
+- `utils/logger.py`
    - CSV logging for measured, true, and snapshot values.
-- volt_meas.py
-   - Thin entry-point wrapper that calls main().
+- `utils/math.py`
+   - Shared math helpers for rolling mean/std/RMS calculations.
+- `utils/types.py`
+   - Frozen `Snapshot` data contract and shared sample alias.
+- `utils/visualization.py`
+   - Live plot and async plot wrapper.
+- `main.py`
+   - Real-time orchestration only: data source -> backbone -> logger/visualizer.
+- `scripts/evaluate.py`
+   - Offline evaluation over testbench CSVs.
+- `scripts/integrate.py`
+   - Library-style entrypoints for downstream systems.
+- `scripts/ci_compliance.py`
+   - Lightweight architecture and cleanup checker used by CI.
+- `scripts/README.md`
+   - Developer guide for script entrypoints and command examples.
+- `tests/test_evaluate.py`
+   - Smoke test for offline evaluation.
+- `tests/test_async_visualizer.py`
+   - Headless visualization test.
+- `tests/test_baseline.py` and `tests/test_hysteresis.py`
+   - Backbone behavior tests.
 
 ## Run from repo root
 Examples showing common runs. Use `--help` for full CLI options.
@@ -41,6 +77,14 @@ Examples showing common runs. Use `--help` for full CLI options.
    python -m software.main --source csv --csv-path software/output/testbench/stable20mA.csv \
       --backbone stddev_window --stop-on-snapshot
 
+   Single backbone on a single dataset:
+   python -m software.scripts.evaluate --input software/output/testbench/stable20mA.csv \
+      --backbones baseline --out software/output/evaluate/baseline-stable20mA
+
+   Batch evaluate the whole testbench folder:
+   python -m software.scripts.evaluate --input software/output/testbench \
+      --backbones stddev_window,baseline,hysteresis --out software/output/evaluate/batch
+
 4. Use the hardware ADS1256 input (COM port configured via `--port`):
    python -m software.main --source serial --port COM5 --baud 115200 --backbone baseline
 
@@ -48,6 +92,7 @@ Notes:
 - Snapshot detection strategies live in `software/backbones/` and implement `update(sample) -> Optional[Snapshot]`.
 - Runtime parameters and CLI defaults are centralized in `software/config/config.py`.
 - Outputs are routed into `software/output/<source>` to keep hardware and testbench logs separate.
+- The preferred developer workflow lives in [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts README](scripts/README.md).
 
 ## Snapshot function: where it is and how it works
 The core snapshot behavior is implemented in main.py inside the main loop:
@@ -57,15 +102,16 @@ The core snapshot behavior is implemented in main.py inside the main loop:
 - If stop-on-snapshot is enabled, the loop exits and a final comparison view is shown.
 
 Key variables to look for in main.py:
-- snapshot_buffer
-- compute_mean_std(...)
-- snapshot_value
-- stable_samples and min_stable_samples
+- `MovingAverageFilter`
+- `LowPassFilter`
+- `create_backbone(...)`
+- `mean_rms(...)`
+- `backbone.update((timestamp, voltage, current_mA))`
 
 ## How to integrate snapshot into the larger FPP software
 Use this as the reference pipeline:
 1. Identify your measured voltage stream (raw or filtered).
-2. Insert a rolling buffer and stddev check (see compute_mean_std in main.py).
+2. Insert the same rolling/stability logic used by the selected backbone, not a second copy in the orchestration loop.
 3. When stddev <= threshold for a minimum duration, compute a snapshot value.
 4. Freeze the snapshot and stop acquisition if desired.
 5. Display the snapshot next to the true/reference value.

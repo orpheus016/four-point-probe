@@ -3,9 +3,18 @@ Four point probe for semiconductor instrumentation system
 
 ## Software: voltage simulation pipeline
 
-This repo includes a modular Python simulation for voltage-vs-time acquisition with
+This repo includes a modular Python simulation for voltage acquisition with
 filters, live plotting, and CSV logging. It is designed to be swapped later with
 ADS1256 serial input from Arduino.
+
+## Development
+
+If you plan to change code, start with:
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) for the CI contract, local preflight, and PR checklist.
+- [software/scripts/README.md](software/scripts/README.md) for `evaluate`, `integrate`, and the compliance checker.
+- [software/README.md](software/README.md) for the software module overview and run examples.
+- `CONTRIBUTING.md` also explains how to write new tests under `software/tests/` and run them from the repo root.
 
 ### Setup
 
