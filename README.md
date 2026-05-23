@@ -34,3 +34,39 @@ Example with custom settings:
 ```bash
 python -m software.main --sample-rate 100 --window-seconds 8 --noise 0.0005 --step
 ```
+
+## Serial protocol and CLI
+
+Hardware integration uses a small text protocol implemented by the Arduino firmware and
+managed by `software/command/serial_commander.py`.
+
+Framing markers (exact strings):
+
+- `*STREAM_START` — emitted by the Arduino to mark stream beginning
+- `*STREAM_STOP` — emitted by the Arduino to mark stream termination
+
+Control commands sent from host to Arduino (single ASCII characters):
+
+- `R` — reset device
+- `C` — start streaming samples
+- `s` — stop streaming
+- `iN` — set current stage to `N` (e.g. `i2`)
+
+The serial reader expects CSV-style measurement lines containing `voltage,current_mA`.
+
+Common CLI execution examples:
+
+- Replay testbench CSVs and write evaluation results:
+	python -m software.scripts.evaluate --input software/output/testbench --out results/
+
+Single backbone on single dataset (example):
+	python -m software.scripts.evaluate \
+		--input software/output/testbench/stable20mA.csv \
+		--backbones baseline \
+		--out results/single_baseline_stable20mA
+- Run main with hardware ADS1256 on COM5:
+	python -m software.main --source serial --port COM5 --baud 115200 --backbone baseline
+- Run headless evaluation from Python:
+	python -c "from software.scripts.evaluate import main; main(['--input','software/output/testbench'])"
+
+See `software/config/config.py` for all CLI defaults and flags (backbone selection, hysteresis thresholds, plot mode, etc.).

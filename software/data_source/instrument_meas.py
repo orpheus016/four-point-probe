@@ -16,12 +16,7 @@ SNAPSHOT_STD_THRESHOLD_V = 0.001 # Voltage stability threshold for sending snaps
 SNAPSHOT_WINDOW = 20
 MIN_SNAPSHOT_SEND_INTERVAL_S = 0.0
 
-def compute_mean_std(values):
-    if not values:
-        return None, None
-    mean = sum(values) / len(values)
-    variance = sum((v - mean) ** 2 for v in values) / len(values)
-    return mean, variance ** 0.5
+from ..utils.math import mean_std
 
 
 def main():
@@ -91,7 +86,7 @@ def main():
                 if len(window) > SNAPSHOT_WINDOW:
                     window.pop(0)
 
-                mean, std = compute_mean_std(window)
+                mean, std = mean_std(window)
                 now = time.time()
                 if mean is None or std is None:
                     continue

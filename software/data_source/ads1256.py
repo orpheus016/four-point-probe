@@ -10,17 +10,34 @@ from ..utils.types import Sample
 from ..command.serial_commander import SerialCommander
 
 
-def ads1256_reader(config: SerialConfig, manage_current_switching: bool = True) -> Iterator[Sample]:
-    """Yield (timestamp_s, voltage_v, current_mA) tuples from the Arduino stream."""
-    commander = SerialCommander(config)
+def ads1256_reader(
+    config: SerialConfig,
+    commander: SerialCommander | None = None,
+    manage_current_switching: bool = True,
+) -> Iterator[Sample]:
+    """Yield (timestamp_s, voltage_v, current_mA) tuples from the Arduino stream.
+
+    If an external `commander` is provided, it will be used but not closed by this
+    generator; the caller is responsible for lifecycle management. If no commander
+    is provided, this function will create and own one and will close it on exit.
+    """
+    owner = False
+    if commander is None:
+        commander = SerialCommander(config)
+        owner = True
+
+    # ensure the serial port is open
     commander.open()
     start_time_s = time.perf_counter()
     try:
-        commander.reset()
-        time.sleep(config.protocol.stream_startup_delay_s)
-        commander.flush_input()
-        commander.start_stream()
-        commander.wait_for_marker(config.markers.stream_start)
+        # only perform reset/start sequence if we own the commander; if caller
+        # provided an already-configured commander assume they're managing lifecycle
+        if owner:
+            commander.reset()
+            time.sleep(config.protocol.stream_startup_delay_s)
+            commander.flush_input()
+            commander.start_stream()
+            commander.wait_for_marker(config.markers.stream_start)
 
         while True:
             line = commander.read_line()
@@ -37,11 +54,12 @@ def ads1256_reader(config: SerialConfig, manage_current_switching: bool = True) 
             parsed = commander.parse_sample_line(line, sample_time_s)
             yield (parsed.timestamp_s, parsed.voltage_v, parsed.current_mA)
 
-            if manage_current_switching:
+            if manage_current_switching and owner:
                 commander.decide_stage(parsed.voltage_v, parsed.current_mA)
     finally:
-        try:
-            commander.stop_stream()
-            time.sleep(config.protocol.stream_restart_delay_s)
-        finally:
-            commander.close()
+        if owner:
+            try:
+                commander.stop_stream()
+                time.sleep(config.protocol.stream_restart_delay_s)
+            finally:
+                commander.close()

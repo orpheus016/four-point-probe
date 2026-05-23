@@ -2,43 +2,25 @@
 
 from __future__ import annotations
 
-import math
 import time
 from collections import deque
 from datetime import datetime
 from typing import Deque, Optional
 
-from .backbones.stddev_window import StdDevWindowBackbone
-from .backbones.baseline import BaselineBackbone
-from .backbones.hysteresis import HysteresisBackbone
 from .config.config import build_arg_parser, build_serial_config, build_simulation_config
 from .data_source.ads1256 import ads1256_reader
-from .tests.csv_replay import csv_replay_reader
+from .command.serial_commander import SerialCommander
+from .utils.csv_replay import csv_replay_reader
 from .data_source.dummy import dummy_voltage_generator
 from .data_source.settling import settling_signal_generator
 from .data_source.worst_case import worst_case_signal_generator
 from .utils.filters import LowPassFilter, MovingAverageFilter
 from .utils.logger import CsvLogger
-from .utils.visualization import LivePlot, AsyncVisualizer
+from .utils.visualization import AsyncVisualizer
 import os
 from .utils.types import Sample
-
-
-def compute_stats(values: Deque[float]) -> tuple[Optional[float], Optional[float]]:
-    if not values:
-        return None, None
-    mean = sum(values) / len(values)
-    rms = math.sqrt(sum(v * v for v in values) / len(values))
-    return mean, rms
-
-
-def compute_mean_std(values: Deque[float]) -> tuple[Optional[float], Optional[float]]:
-    if not values:
-        return None, None
-    count = len(values)
-    mean = sum(values) / count
-    variance = sum((v - mean) ** 2 for v in values) / count
-    return mean, math.sqrt(variance)
+from .utils.backbone_factory import create_backbone
+from .utils.math import mean_rms
 
 
 def build_source_iterator(args, sim_config):
@@ -56,31 +38,6 @@ def build_source_iterator(args, sim_config):
     raise ValueError(f"unsupported source: {args.source}")
 
 
-def build_backbone(args, sim_config):
-    window_samples = max(1, int(sim_config.snapshot_window_s * sim_config.sample_rate_hz))
-    min_stable_samples = max(1, int(sim_config.snapshot_min_duration_s * sim_config.sample_rate_hz))
-
-    if args.backbone == "stddev_window":
-        # StdDevWindow expects at least 2 samples for variance computation
-        ws = max(2, window_samples)
-        return StdDevWindowBackbone(ws, sim_config.snapshot_std_threshold_v, min_stable_samples)
-
-    if args.backbone == "baseline":
-        ws = max(2, window_samples)
-        return BaselineBackbone(ws, sim_config.snapshot_std_threshold_v, min_stable_samples)
-
-    if args.backbone == "hysteresis":
-        # Hysteresis thresholds come from CLI flags --hysteresis-enter/exit
-        enter = getattr(args, "hysteresis_enter", None)
-        exit_t = getattr(args, "hysteresis_exit", None)
-        if enter is None or exit_t is None:
-            raise ValueError("hysteresis thresholds not provided")
-        ws = max(1, window_samples)
-        return HysteresisBackbone(ws, enter, exit_t, min_stable_samples)
-
-    raise ValueError(f"unsupported backbone: {args.backbone}")
-
-
 def main() -> None:
     args = build_arg_parser().parse_args()
     sim_config = build_simulation_config(args)
@@ -90,7 +47,7 @@ def main() -> None:
 
     moving_average = MovingAverageFilter(sim_config.moving_average_window)
     low_pass = LowPassFilter(sim_config.low_pass_alpha) if sim_config.enable_low_pass else None
-    backbone = build_backbone(args, sim_config)
+    backbone = create_backbone(args.backbone, sim_config, args)
 
     # route outputs per source to keep hardware/testbench logs separate
     if args.source == "serial":
@@ -102,7 +59,19 @@ def main() -> None:
 
     plotter = AsyncVisualizer(sim_config.window_seconds, window_samples, plot_mode=args.plot_mode)
     logger = CsvLogger(out_dir)
-    source_iter = build_source_iterator(args, sim_config)
+
+    commander: SerialCommander | None = None
+    # for serial source, create a commander and pass it into the reader so main
+    # can signal stage changes when a Snapshot is emitted
+    if args.source == "serial":
+        serial_config = build_serial_config(args)
+        commander = SerialCommander(serial_config)
+        # do not start the stream here; ads1256_reader will open the port and
+        # perform startup sequence when owner=True. We pass the commander so
+        # we can call `decide_stage` on snapshot events and also close it later.
+        source_iter = ads1256_reader(serial_config, commander=commander, manage_current_switching=False)
+    else:
+        source_iter = build_source_iterator(args, sim_config)
 
     start = time.perf_counter()
     dt_s = 1.0 / sim_config.sample_rate_hz
@@ -128,10 +97,19 @@ def main() -> None:
             snapshot = backbone.update((elapsed_sample_s, filtered, current_mA))
 
             buffer.append(filtered)
-            mean, rms = compute_stats(buffer)
+            mean, rms = mean_rms(buffer)
 
             if snapshot is not None:
                 last_snapshot_value = snapshot.voltage
+                # if using serial hardware, let the commander decide stage based
+                # on the frozen snapshot value so hardware switching happens
+                # only when a stable snapshot is observed.
+                if commander is not None:
+                    try:
+                        commander.decide_stage(snapshot.voltage, snapshot.current_mA)
+                    except Exception:
+                        # do not crash acquisition if stage decision fails
+                        pass
 
             is_stable = snapshot is not None
 
@@ -151,6 +129,15 @@ def main() -> None:
             plotter.show_final_comparison(None, last_snapshot_value)
         plotter.close()
         logger.close()
+        if commander is not None:
+            try:
+                commander.stop_stream()
+            except Exception:
+                pass
+            try:
+                commander.close()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
