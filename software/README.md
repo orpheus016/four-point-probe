@@ -18,7 +18,7 @@ capture a frozen snapshot of the measurement.
    - Moving average and optional low-pass filtering.
 - main.py
    - Orchestrates sampling, filtering, snapshot detection, plotting, and logging.
-   - This is where the core snapshot logic lives.
+   - Orchestration-only: snapshot strategies are implemented inside `backbones/`.
 - visualization.py
    - Live plot with comparison (true vs snapshot) or full history mode.
 - logger.py
@@ -27,10 +27,27 @@ capture a frozen snapshot of the measurement.
    - Thin entry-point wrapper that calls main().
 
 ## Run from repo root
-1. Baseline run for later integration into the full FPP software:
-    `python -m software.main --current 0.01 --resistance 1.5 --tau 0.4 --transient-model underdamped --damping 0.35 --line-freq 60 --snapshot-threshold 0.0004 --snapshot-window 2.0 --snapshot-min-duration 2.0 --low-pass --low-pass-alpha 0.1`
-2. Verify continuous graph and snapshot updates:
-    `python -m software.main --snapshot-mode continuous --no-stop-on-snapshot --plot-mode full`
+Examples showing common runs. Use `--help` for full CLI options.
+
+1. One-shot measurement using the default `baseline` strategy:
+   python -m software.main --source dummy --backbone baseline --current 0.01 --resistance 1.5 \
+      --snapshot-threshold 0.0004 --snapshot-window 2.0 --snapshot-min-duration 2.0
+
+2. Hysteresis-based snapshot with explicit enter/exit thresholds:
+   python -m software.main --source dummy --backbone hysteresis \
+      --hysteresis-enter 0.020 --hysteresis-exit 0.015 --snapshot-window 1.0
+
+3. Replay a CSV testbench dataset and log outputs to `software/output/testbench`:
+   python -m software.main --source csv --csv-path software/output/testbench/stable20mA.csv \
+      --backbone stddev_window --stop-on-snapshot
+
+4. Use the hardware ADS1256 input (COM port configured via `--port`):
+   python -m software.main --source serial --port COM5 --baud 115200 --backbone baseline
+
+Notes:
+- Snapshot detection strategies live in `software/backbones/` and implement `update(sample) -> Optional[Snapshot]`.
+- Runtime parameters and CLI defaults are centralized in `software/config/config.py`.
+- Outputs are routed into `software/output/<source>` to keep hardware and testbench logs separate.
 
 ## Snapshot function: where it is and how it works
 The core snapshot behavior is implemented in main.py inside the main loop:

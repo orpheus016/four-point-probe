@@ -2,5 +2,7 @@
 
 from .base import BaseBackbone
 from .stddev_window import StdDevWindowBackbone
+from .hysteresis import HysteresisBackbone
+from .baseline import BaselineBackbone
 
-__all__ = ["BaseBackbone", "StdDevWindowBackbone"]
+__all__ = ["BaseBackbone", "StdDevWindowBackbone", "HysteresisBackbone", "BaselineBackbone"]

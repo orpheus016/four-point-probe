@@ -115,7 +115,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     defaults = CLIConfig()
     parser = argparse.ArgumentParser(description="Simulated ADS1256 voltage acquisition")
     parser.add_argument("--source", choices=["dummy", "serial", "csv", "settling", "worst_case"], default=defaults.source)
-    parser.add_argument("--backbone", choices=["stddev_window"], default=defaults.backbone)
+    parser.add_argument("--backbone", choices=["stddev_window", "baseline", "hysteresis"], default=defaults.backbone)
     parser.add_argument("--csv-path", type=str, default=defaults.csv_path)
     parser.add_argument("--sample-rate", type=float, default=defaults.sample_rate_hz)
     parser.add_argument("--window-seconds", type=float, default=defaults.window_seconds)
@@ -137,6 +137,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--snapshot-window", type=float, default=defaults.snapshot_window_s)
     parser.add_argument("--snapshot-threshold", type=float, default=defaults.snapshot_std_threshold_v)
     parser.add_argument("--snapshot-min-duration", type=float, default=defaults.snapshot_min_duration_s)
+    # Hysteresis backbone tuning
+    parser.add_argument("--hysteresis-enter", type=float, default=1.0, help="enter threshold (V) for hysteresis backbone")
+    parser.add_argument("--hysteresis-exit", type=float, default=0.8, help="exit threshold (V) for hysteresis backbone")
     parser.add_argument("--snapshot-mode", choices=["first", "continuous"], default=defaults.snapshot_mode)
     parser.add_argument("--plot-mode", choices=["comparison", "full"], default=defaults.plot_mode)
     parser.add_argument("--stop-on-snapshot", action=argparse.BooleanOptionalAction, default=defaults.stop_on_snapshot)

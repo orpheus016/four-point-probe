@@ -6,6 +6,9 @@ from collections import deque
 from typing import Deque, Optional
 
 import matplotlib.pyplot as plt
+import threading
+import queue
+import time
 
 
 class LivePlot:
@@ -130,3 +133,74 @@ class LivePlot:
     def close(self) -> None:
         plt.ioff()
         plt.close(self._fig)
+
+
+class AsyncVisualizer:
+    """Background visualizer that accepts updates via a queue and renders them
+    on a worker thread to avoid blocking the acquisition loop.
+
+    Note: Matplotlib is not fully thread-safe across all backends; this class
+    keeps painting simple and uses short timeouts to reduce contention.
+    """
+
+    def __init__(self, window_seconds: float, max_samples: int, plot_mode: str = "comparison") -> None:
+        self._live = LivePlot(window_seconds, max_samples, plot_mode=plot_mode)
+        self._q: "queue.Queue[tuple]" = queue.Queue()
+        self._thread = threading.Thread(target=self._worker, daemon=True)
+        self._running = True
+        self._thread.start()
+
+    def _worker(self) -> None:
+        while self._running:
+            try:
+                item = self._q.get(timeout=0.2)
+            except queue.Empty:
+                # allow periodic UI refresh
+                continue
+            if item is None:
+                break
+            try:
+                self._live.update(*item)
+            except Exception:
+                # swallow plotting errors so the acquisition loop isn't affected
+                pass
+
+    def submit_update(
+        self,
+        t_s: float,
+        measured_v: float,
+        true_v: Optional[float],
+        snapshot_v: Optional[float],
+        mean: Optional[float],
+        rms: Optional[float],
+        is_stable: bool,
+    ) -> None:
+        # non-blocking put; if queue is full this will block briefly
+        try:
+            self._q.put_nowait((t_s, measured_v, true_v, snapshot_v, mean, rms, is_stable))
+        except queue.Full:
+            # fall back to blocking put to ensure eventual delivery
+            self._q.put((t_s, measured_v, true_v, snapshot_v, mean, rms, is_stable))
+
+    def show_final_comparison(self, true_v: Optional[float], snapshot_v: Optional[float]) -> None:
+        # stop worker to allow final blocking display
+        self._running = False
+        # flush queue then call final render on main thread
+        try:
+            while True:
+                item = self._q.get_nowait()
+                if item is None:
+                    break
+        except queue.Empty:
+            pass
+        self._live.show_final_comparison(true_v, snapshot_v)
+
+    def close(self) -> None:
+        # signal worker to exit
+        self._running = False
+        try:
+            self._q.put_nowait(None)
+        except Exception:
+            pass
+        self._thread.join(timeout=1.0)
+        self._live.close()

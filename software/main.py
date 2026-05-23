@@ -9,15 +9,18 @@ from datetime import datetime
 from typing import Deque, Optional
 
 from .backbones.stddev_window import StdDevWindowBackbone
+from .backbones.baseline import BaselineBackbone
+from .backbones.hysteresis import HysteresisBackbone
 from .config.config import build_arg_parser, build_serial_config, build_simulation_config
 from .data_source.ads1256 import ads1256_reader
-from .utils.csv_replay import csv_replay_reader
+from .tests.csv_replay import csv_replay_reader
 from .data_source.dummy import dummy_voltage_generator
 from .data_source.settling import settling_signal_generator
 from .data_source.worst_case import worst_case_signal_generator
 from .utils.filters import LowPassFilter, MovingAverageFilter
 from .utils.logger import CsvLogger
-from .utils.visualization import LivePlot
+from .utils.visualization import LivePlot, AsyncVisualizer
+import os
 from .utils.types import Sample
 
 
@@ -54,10 +57,27 @@ def build_source_iterator(args, sim_config):
 
 
 def build_backbone(args, sim_config):
+    window_samples = max(1, int(sim_config.snapshot_window_s * sim_config.sample_rate_hz))
+    min_stable_samples = max(1, int(sim_config.snapshot_min_duration_s * sim_config.sample_rate_hz))
+
     if args.backbone == "stddev_window":
-        window_samples = max(2, int(sim_config.snapshot_window_s * sim_config.sample_rate_hz))
-        min_stable_samples = max(1, int(sim_config.snapshot_min_duration_s * sim_config.sample_rate_hz))
-        return StdDevWindowBackbone(window_samples, sim_config.snapshot_std_threshold_v, min_stable_samples)
+        # StdDevWindow expects at least 2 samples for variance computation
+        ws = max(2, window_samples)
+        return StdDevWindowBackbone(ws, sim_config.snapshot_std_threshold_v, min_stable_samples)
+
+    if args.backbone == "baseline":
+        ws = max(2, window_samples)
+        return BaselineBackbone(ws, sim_config.snapshot_std_threshold_v, min_stable_samples)
+
+    if args.backbone == "hysteresis":
+        # Hysteresis thresholds come from CLI flags --hysteresis-enter/exit
+        enter = getattr(args, "hysteresis_enter", None)
+        exit_t = getattr(args, "hysteresis_exit", None)
+        if enter is None or exit_t is None:
+            raise ValueError("hysteresis thresholds not provided")
+        ws = max(1, window_samples)
+        return HysteresisBackbone(ws, enter, exit_t, min_stable_samples)
+
     raise ValueError(f"unsupported backbone: {args.backbone}")
 
 
@@ -72,8 +92,16 @@ def main() -> None:
     low_pass = LowPassFilter(sim_config.low_pass_alpha) if sim_config.enable_low_pass else None
     backbone = build_backbone(args, sim_config)
 
-    plotter = LivePlot(sim_config.window_seconds, window_samples, plot_mode=args.plot_mode)
-    logger = CsvLogger(args.output_dir)
+    # route outputs per source to keep hardware/testbench logs separate
+    if args.source == "serial":
+        out_dir = os.path.join(args.output_dir, "ads1256")
+    elif args.source in ("csv", "settling", "worst_case"):
+        out_dir = os.path.join(args.output_dir, "testbench")
+    else:
+        out_dir = os.path.join(args.output_dir, args.source)
+
+    plotter = AsyncVisualizer(sim_config.window_seconds, window_samples, plot_mode=args.plot_mode)
+    logger = CsvLogger(out_dir)
     source_iter = build_source_iterator(args, sim_config)
 
     start = time.perf_counter()
@@ -107,7 +135,7 @@ def main() -> None:
 
             is_stable = snapshot is not None
 
-            plotter.update(elapsed_s, filtered, None, last_snapshot_value, mean, rms, is_stable)
+            plotter.submit_update(elapsed_s, filtered, None, last_snapshot_value, mean, rms, is_stable)
             logger.log_sample(datetime.now(), elapsed_s, filtered, current_mA, snapshot)
 
             if snapshot is not None and args.stop_on_snapshot:
@@ -119,6 +147,7 @@ def main() -> None:
         pass
     finally:
         if stop_requested:
+            # show a blocking final comparison
             plotter.show_final_comparison(None, last_snapshot_value)
         plotter.close()
         logger.close()
