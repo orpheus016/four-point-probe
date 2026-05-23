@@ -24,7 +24,9 @@ class HysteresisBackbone(BaseBackbone):
         enter_threshold: float,
         exit_threshold: float,
         min_stable_samples: int,
+        min_recording_samples: int = 1,
     ) -> None:
+        super().__init__(min_recording_samples=min_recording_samples)
         if window_samples < 1:
             raise ValueError("window_samples must be >= 1")
         if min_stable_samples < 1:
@@ -47,6 +49,7 @@ class HysteresisBackbone(BaseBackbone):
 
     def update(self, sample: Sample) -> Optional[Snapshot]:
         timestamp, voltage, current_mA = sample
+        self._mark_sample()
 
         # adjust sums for sliding window
         if len(self._window) == self._window_samples:
@@ -74,6 +77,8 @@ class HysteresisBackbone(BaseBackbone):
                 self._stable_count = 0
 
             if self._stable_count >= self._min_stable_samples:
+                if not self._has_min_recording():
+                    return None
                 self._in_snapshot = True
                 resistance = None
                 if current_mA > 0.0:
@@ -103,3 +108,4 @@ class HysteresisBackbone(BaseBackbone):
         self._sum_squares = 0.0
         self._stable_count = 0
         self._in_snapshot = False
+        self._samples_seen = 0

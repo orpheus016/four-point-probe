@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 
 import matplotlib
@@ -30,4 +31,16 @@ def test_evaluate_single_dataset_smoke(tmp_path):
     write_summary(out_dir, str(csv_path), data)
 
     assert (out_dir / "stable20mA.png").exists()
-    assert (out_dir / "stable20mA-metrics.csv").exists()
+    metrics_path = out_dir / "stable20mA-metrics.csv"
+    assert metrics_path.exists()
+
+    with metrics_path.open(newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["backbone"] == "baseline"
+    assert row["decided_snapshot"] == "*"
+    assert row["decided_timestamp"]
+    assert row["decided_voltage"]
+    assert row["decided_current_mA"]

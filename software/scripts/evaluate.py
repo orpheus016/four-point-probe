@@ -1,7 +1,8 @@
 """Offline evaluation tool: run multiple backbones over CSV testbench data.
 
 Produces per-file PNG overlays and a CSV summary of simple metrics (RMSE, MAE, MaxAbs)
-for snapshot voltages when available.
+for snapshot voltages when available. The decided snapshot is highlighted with a star
+and written into the metrics CSV.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from typing import Iterable, List, Optional
 
 import matplotlib.pyplot as plt
 
-from ..config.config import build_simulation_config
+from ..config.config import build_arg_parser, build_simulation_config
 from ..utils.csv_replay import csv_replay_reader
 from ..utils.backbone_factory import create_backbone
 from ..utils.types import Snapshot
@@ -60,10 +61,17 @@ def evaluate_file(csv_path: str, backbones: Iterable[str], sim_config, args) -> 
 			if snap is not None:
 				snapshots.append(snap)
 
+		decided_snapshot = snapshots[0] if snapshots else None
+
 		# compute errors per snapshot vs last-window-mean reference
 		errors: List[float] = []
 		refs: List[float] = []
-		for snap in snapshots:
+		if decided_snapshot is not None:
+			candidate_snapshots = [decided_snapshot]
+		else:
+			candidate_snapshots = []
+
+		for snap in candidate_snapshots:
 			# find index closest to snapshot.timestamp
 			idx = min(range(len(times)), key=lambda k: abs(times[k] - snap.timestamp))
 			start = max(0, idx - window_samples + 1)
@@ -74,6 +82,7 @@ def evaluate_file(csv_path: str, backbones: Iterable[str], sim_config, args) -> 
 		metrics = compute_metrics(errors)
 		results[bname] = {
 			"snapshots": snapshots,
+			"decided_snapshot": decided_snapshot,
 			"metrics": metrics,
 			"refs": refs,
 		}
@@ -90,12 +99,22 @@ def plot_results(base_out: Path, name: str, data: dict, show: bool = False) -> N
 
 	for bname, info in results.items():
 		snaps: List[Snapshot] = info["snapshots"]
+		decided_snapshot: Optional[Snapshot] = info.get("decided_snapshot")
 		if snaps:
 			plt.scatter(
 				[s.current_mA for s in snaps],
 				[s.voltage for s in snaps],
 				label=f"{bname} snapshots",
 				s=18,
+			)
+		if decided_snapshot is not None:
+			plt.scatter(
+				[decided_snapshot.current_mA],
+				[decided_snapshot.voltage],
+				marker="*",
+				s=180,
+				label=f"{bname} decided snapshot",
+				zorder=5,
 			)
 
 	plt.xlabel("Current (mA)")
@@ -114,20 +133,54 @@ def write_summary(base_out: Path, name: str, data: dict) -> None:
 	out_csv = base_out / f"{Path(name).stem}-metrics.csv"
 	with out_csv.open("w", newline="", encoding="utf-8") as fh:
 		writer = csv.writer(fh)
-		writer.writerow(["backbone", "rmse", "mae", "maxabs", "num_snapshots"])
+		writer.writerow([
+			"backbone",
+			"decided_snapshot",
+			"decided_timestamp",
+			"decided_voltage",
+			"decided_current_mA",
+			"decided_resistance",
+			"decided_std_dev",
+			"decided_stage",
+			"rmse",
+			"mae",
+			"maxabs",
+			"num_snapshots",
+		])
 		for bname, info in data["results"].items():
 			m = info["metrics"]
-			writer.writerow([bname, m.rmse, m.mae, m.maxabs, len(info["snapshots"])])
+			decided_snapshot: Optional[Snapshot] = info.get("decided_snapshot")
+			if decided_snapshot is None:
+				decided_values = ["", "", "", "", "", "", ""]
+				selected_marker = ""
+			else:
+				selected_marker = "*"
+				decided_values = [
+					f"{decided_snapshot.timestamp:.6f}",
+					f"{decided_snapshot.voltage:.8f}",
+					f"{decided_snapshot.current_mA:.8f}",
+					"" if decided_snapshot.resistance is None else f"{decided_snapshot.resistance:.8f}",
+					"" if decided_snapshot.std_dev is None else f"{decided_snapshot.std_dev:.8f}",
+					"" if decided_snapshot.stage is None else decided_snapshot.stage,
+				]
+			writer.writerow([
+				bname,
+				selected_marker,
+				*decided_values,
+				m.rmse,
+				m.mae,
+				m.maxabs,
+				len(info["snapshots"]),
+			])
 
 
 def build_parser() -> argparse.ArgumentParser:
-	p = argparse.ArgumentParser(description="Evaluate backbones against CSV testbench data")
+	p = build_arg_parser()
+	p.description = "Evaluate backbones against CSV testbench data"
 	p.add_argument("--input", type=str, default="software/output/testbench", help="file or directory to read CSVs from")
 	p.add_argument("--out", type=str, default="software/output/evaluate", help="output directory for plots and summaries")
 	p.add_argument("--backbones", type=str, default="stddev_window,baseline,hysteresis", help="comma-separated backbone names to evaluate")
 	p.add_argument("--show", action="store_true", help="show interactive plots")
-	p.add_argument("--hysteresis-enter", type=float, default=1.0)
-	p.add_argument("--hysteresis-exit", type=float, default=0.8)
 	return p
 
 

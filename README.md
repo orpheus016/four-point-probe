@@ -44,6 +44,26 @@ Example with custom settings:
 python -m software.main --sample-rate 100 --window-seconds 8 --noise 0.0005 --step
 ```
 
+## Offline data paths
+
+There are two ways to work with recorded CSV data:
+
+1. Replay a CSV through the live runtime when you want the same pipeline as hardware, including the backbone, logger, and visualizer:
+
+```bash
+python -m software.main --source csv --csv-path software/output/testbench/stable20mA.csv --backbone baseline
+```
+
+2. Run offline evaluation when you want metrics and snapshot comparison without hardware commands or the live plot loop:
+
+```bash
+python -m software.scripts.evaluate --input software/output/testbench/stable20mA.csv --backbones baseline --out software/output/evaluate/baseline-stable20mA
+```
+
+The offline evaluator writes a metrics CSV with the decided snapshot fields, marks that chosen snapshot with a star in the plot, and keeps the result separate from the live runtime output.
+
+The default snapshot recording gate is configured in [software/config/config.py](software/config/config.py), including the minimum recording duration used before a backbone may decide on a VI snapshot.
+
 ## Serial protocol and CLI
 
 Hardware integration uses a small text protocol implemented by the Arduino firmware and

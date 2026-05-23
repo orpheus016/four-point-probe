@@ -13,7 +13,8 @@ from ..utils.types import Sample, Snapshot
 class StdDevWindowBackbone(BaseBackbone):
 	"""Emit snapshots when a sliding window remains stable for a dwell count."""
 
-	def __init__(self, window_samples: int, std_threshold: float, min_stable_samples: int) -> None:
+	def __init__(self, window_samples: int, std_threshold: float, min_stable_samples: int, min_recording_samples: int = 1) -> None:
+		super().__init__(min_recording_samples=min_recording_samples)
 		if window_samples < 2:
 			raise ValueError("window_samples must be >= 2")
 		if min_stable_samples < 1:
@@ -27,9 +28,11 @@ class StdDevWindowBackbone(BaseBackbone):
 		self._sum = 0.0
 		self._sum_squares = 0.0
 		self._stable_samples = 0
+		self._snapshot_emitted = False
 
 	def update(self, sample: Sample) -> Optional[Snapshot]:
 		timestamp, voltage, current_mA = sample
+		self._mark_sample()
 		if len(self._window) == self._window_samples:
 			old_value = self._window[0]
 			self._sum -= old_value
@@ -40,6 +43,7 @@ class StdDevWindowBackbone(BaseBackbone):
 		self._sum_squares += voltage * voltage
 		if len(self._window) < self._window_samples:
 			self._stable_samples = 0
+			self._snapshot_emitted = False
 			return None
 
 		mean = self._sum / self._window_samples
@@ -51,14 +55,16 @@ class StdDevWindowBackbone(BaseBackbone):
 			self._stable_samples += 1
 		else:
 			self._stable_samples = 0
+			self._snapshot_emitted = False
 
-		if self._stable_samples < self._min_stable_samples:
+		if self._stable_samples < self._min_stable_samples or not self._has_min_recording() or self._snapshot_emitted:
 			return None
 
 		resistance = None
 		if current_mA > 0.0:
 			resistance = mean / (current_mA / 1000.0)
 
+		self._snapshot_emitted = True
 		return Snapshot(
 			timestamp=timestamp,
 			voltage=mean,
@@ -72,3 +78,5 @@ class StdDevWindowBackbone(BaseBackbone):
 		self._sum = 0.0
 		self._sum_squares = 0.0
 		self._stable_samples = 0
+		self._snapshot_emitted = False
+		self._samples_seen = 0
