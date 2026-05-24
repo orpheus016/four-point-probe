@@ -42,3 +42,11 @@ class LowPassFilter:
         filtered = (self._alpha * value) + ((1.0 - self._alpha) * self._prev)
         self._prev = filtered
         return filtered
+
+'''
+Implement Switching Kalman Filter
+Reference to reproduce:
+https://arxiv.org/html/2412.06601v1
+or
+https://share.google/uvIKaRY1qkant3d77
+'''

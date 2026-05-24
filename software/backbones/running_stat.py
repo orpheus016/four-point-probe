@@ -1,4 +1,7 @@
 """Running-stat backbone using incremental windowed mean and variance."""
+'''
+Reproduced from https://stackoverflow.com/questions/5147378/rolling-variance-algorithm
+'''
 
 from __future__ import annotations
 
