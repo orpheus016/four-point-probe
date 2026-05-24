@@ -188,15 +188,36 @@ python -m software.scripts.evaluate --source worst_case \
 python -m software.scripts.evaluate --input software/output/testbench/stable20mALONG.csv --backbones baseline --out software/output/evaluate/baseline-stable20mALONG
 ```
 
+- Transient playback with animation shown on screen only:
+```bash
+python -m software.scripts.evaluate --input software/output/testbench/stable20mALONG.csv \
+   --backbones baseline,stddev_window,hysteresis \
+   --evaluation-plot-mode transient --evaluation-animate --evaluation-animation-output screen \
+   --out software/output/evaluate/transient-demo
+```
+
+- Transient playback exported to GIF or video:
+```bash
+python -m software.scripts.evaluate --input software/output/testbench/stable20mALONG.csv \
+   --backbones baseline,stddev_window,hysteresis \
+   --evaluation-plot-mode transient --evaluation-animate --evaluation-animation-output gif \
+   --out software/output/evaluate/transient-gif
+```
+
 Key flags:
 - `--source`: `csv`, `dummy`, `settling`, or `worst_case`.
 - `--max-measurement`: maximum generator duration (seconds) for synthetic sources.
 - `--sample-rate`: sample frequency used by synthetic generators.
 - `--backbones`: comma-separated backbone names to run (e.g. `baseline`).
 - `--show`: display interactive plots (omit for CI/headless runs).
+- `--evaluation-plot-mode`: `comparison` for IV plots or `transient` for time-based playback.
+- `--evaluation-animate`: enable incremental playback in transient mode.
+- `--evaluation-animation-output`: `screen`, `gif`, or `video` when animation is enabled.
+- `--evaluation-animation-fps`: frame rate used for exported animation files.
 
 Outputs created:
-- `--out`/`<name>.png` — IV comparison plot with decided snapshot marked.
+- `--out`/`<name>.png` — IV comparison plot, or transient plot when `--evaluation-plot-mode transient` is selected.
+- `--out`/`<name>.gif` or `--out`/`<name>.mp4` — exported animation when the output mode is set accordingly.
 - `--out`/`<name>-metrics.csv` — CSV summary with decided snapshot metadata and metrics (RMSE, MAE, MaxAbs).
 
 Programmatic usage (call helpers directly):

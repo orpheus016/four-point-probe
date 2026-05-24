@@ -51,13 +51,31 @@ def main(argv: Optional[List[str]] = None) -> None:
 	if source == "csv":
 		for f in files:
 			data = evaluate_file(str(f), backbones, sim_config, args)
-			plot_results(out_dir, str(f), data, show=args.show)
+			plot_results(
+				out_dir,
+				str(f),
+				data,
+				show=args.show,
+				plot_mode=args.evaluation_plot_mode,
+				animate=args.evaluation_animate,
+				animation_output=args.evaluation_animation_output,
+				animation_fps=args.evaluation_animation_fps,
+			)
 			write_summary(out_dir, str(f), data)
 	else:
 		samples = build_source_iterator(source, sim_config, args)
 		data = evaluate_samples(samples, backbones, sim_config, args)
 		output_name = f"{source}-{Path(args.input).stem if args.input else source}"
-		plot_results(out_dir, output_name, data, show=args.show)
+		plot_results(
+			out_dir,
+			output_name,
+			data,
+			show=args.show,
+			plot_mode=args.evaluation_plot_mode,
+			animate=args.evaluation_animate,
+			animation_output=args.evaluation_animation_output,
+			animation_fps=args.evaluation_animation_fps,
+		)
 		write_summary(out_dir, output_name, data)
 
 

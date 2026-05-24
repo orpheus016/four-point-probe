@@ -99,6 +99,10 @@ class CLIConfig:
     snapshot_min_duration_s: float = SimulationConfig.snapshot_min_duration_s
     snapshot_mode: str = "first"
     plot_mode: str = "comparison"
+    evaluation_plot_mode: str = "comparison"
+    evaluation_animate: bool = False
+    evaluation_animation_output: str = "screen"
+    evaluation_animation_fps: int = 12
     stop_on_snapshot: bool = True
     output_dir: str = "software/output"
     port: str = "COM12"
@@ -154,6 +158,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hysteresis-exit", type=float, default=0.8, help="exit threshold (V) for hysteresis backbone")
     parser.add_argument("--snapshot-mode", choices=["first", "continuous"], default=defaults.snapshot_mode)
     parser.add_argument("--plot-mode", choices=["comparison", "full"], default=defaults.plot_mode)
+    parser.add_argument("--evaluation-plot-mode", choices=["comparison", "transient"], default=defaults.evaluation_plot_mode)
+    parser.add_argument("--evaluation-animate", action=argparse.BooleanOptionalAction, default=defaults.evaluation_animate)
+    parser.add_argument("--evaluation-animation-output", choices=["screen", "gif", "video"], default=defaults.evaluation_animation_output)
+    parser.add_argument("--evaluation-animation-fps", type=int, default=defaults.evaluation_animation_fps)
     parser.add_argument("--stop-on-snapshot", action=argparse.BooleanOptionalAction, default=defaults.stop_on_snapshot)
     parser.add_argument("--output-dir", type=str, default=defaults.output_dir)
     parser.add_argument("--port", type=str, default=defaults.port)

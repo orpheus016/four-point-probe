@@ -77,6 +77,15 @@ def test_evaluate_falls_back_to_final_sample_when_no_snapshot(monkeypatch):
     assert decided.current_mA == 10.0
 
 
+def test_backbone_styles_are_distinct():
+    from software.utils.visualization import get_backbone_style
+
+    first = get_backbone_style(0)
+    second = get_backbone_style(1)
+
+    assert first["color"] != second["color"]
+
+
 def test_evaluate_single_dataset_smoke(tmp_path):
     from software.scripts.evaluate import evaluate_file, plot_results, write_summary
     from software.config.config import SimulationConfig
@@ -113,6 +122,61 @@ def test_evaluate_single_dataset_smoke(tmp_path):
     assert row["decided_timestamp"]
     assert row["decided_voltage"]
     assert row["decided_current_mA"]
+
+
+def test_evaluate_transient_plot_mode(tmp_path):
+    from software.config.config import SimulationConfig
+    from software.scripts.evaluate import evaluate_file, plot_results
+
+    csv_path = Path("software/output/testbench/stable20mALONG.csv")
+    assert csv_path.exists(), "expected bundled testbench CSV fixture"
+
+    class Args:
+        hysteresis_enter = 1.0
+        hysteresis_exit = 0.8
+
+    sim_config = SimulationConfig()
+    data = evaluate_file(str(csv_path), ["baseline", "stddev_window", "hysteresis"], sim_config, Args())
+
+    out_dir = tmp_path / "evaluate-transient"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    plot_results(out_dir, str(csv_path), data, show=False, plot_mode="transient", animate=False)
+
+    assert (out_dir / "stable20mALONG.png").exists()
+
+
+def test_evaluate_transient_animation_screen(tmp_path, monkeypatch):
+    import matplotlib.pyplot as plt
+
+    from software.config.config import SimulationConfig
+    from software.scripts.evaluate import evaluate_file, plot_results
+
+    monkeypatch.setattr(plt, "pause", lambda *args, **kwargs: None)
+
+    csv_path = Path("software/output/testbench/stable20mALONG.csv")
+    assert csv_path.exists(), "expected bundled testbench CSV fixture"
+
+    class Args:
+        hysteresis_enter = 1.0
+        hysteresis_exit = 0.8
+
+    sim_config = SimulationConfig()
+    data = evaluate_file(str(csv_path), ["baseline", "stddev_window", "hysteresis"], sim_config, Args())
+
+    out_dir = tmp_path / "evaluate-transient-animated"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    plot_results(
+        out_dir,
+        str(csv_path),
+        data,
+        show=False,
+        plot_mode="transient",
+        animate=True,
+        animation_output="screen",
+        animation_fps=12,
+    )
+
+    assert (out_dir / "stable20mALONG.png").exists()
 
 
 def test_evaluate_synthetic_source_smoke(tmp_path):

@@ -13,13 +13,12 @@ from itertools import islice
 from pathlib import Path
 from typing import Iterable, Iterator, List, Optional
 
-import matplotlib.pyplot as plt
-
 from ..data_source.dummy import dummy_voltage_generator
 from ..data_source.settling import settling_signal_generator
 from ..data_source.worst_case import worst_case_signal_generator
 from .backbone_factory import create_backbone
 from .csv_replay import csv_replay_reader
+from .visualization import render_evaluation_results
 from .types import Sample, Snapshot
 
 
@@ -131,45 +130,17 @@ def evaluate_file(csv_path: str, backbones: Iterable[str], sim_config, args) -> 
     return evaluate_samples(csv_replay_reader(csv_path, sample_rate_hz=sim_config.sample_rate_hz), backbones, sim_config, args)
 
 
-def plot_results(base_out: Path, name: str, data: dict, show: bool = False) -> None:
-    voltages = data["voltages"]
-    currents = data["currents"]
-    results = data["results"]
-
-    plt.figure(figsize=(9, 4))
-    plt.plot(currents, voltages, label="measured", lw=1.2)
-
-    for bname, info in results.items():
-        snaps: List[Snapshot] = info["snapshots"]
-        decided_snapshot: Optional[Snapshot] = info.get("decided_snapshot")
-        if snaps:
-            plt.scatter(
-                [s.current_mA for s in snaps],
-                [s.voltage for s in snaps],
-                label=f"{bname} snapshots",
-                s=18,
-            )
-        if decided_snapshot is not None:
-            plt.scatter(
-                [decided_snapshot.current_mA],
-                [decided_snapshot.voltage],
-                marker="*",
-                s=180,
-                color="orange",
-                label=f"{bname} decided snapshot",
-                zorder=5,
-            )
-
-    plt.xlabel("Current (mA)")
-    plt.ylabel("Voltage (V)")
-    plt.title(f"IV comparison: {name}")
-    plt.legend()
-    out_png = base_out / f"{Path(name).stem}.png"
-    plt.tight_layout()
-    plt.savefig(out_png)
-    if show:
-        plt.show()
-    plt.close()
+def plot_results(base_out: Path, name: str, data: dict, show: bool = False, plot_mode: str = "comparison", animate: bool = False, animation_output: str = "screen", animation_fps: int = 12) -> None:
+    render_evaluation_results(
+        base_out,
+        name,
+        data,
+        show=show,
+        plot_mode=plot_mode,
+        animate=animate,
+        animation_output=animation_output,
+        animation_fps=animation_fps,
+    )
 
 
 def write_summary(base_out: Path, name: str, data: dict) -> None:

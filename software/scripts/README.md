@@ -22,6 +22,14 @@ The script reads CSV replay data from `software/utils/csv_replay.py`, runs each 
 
 Note: `evaluate.py` also supports the built-in synthetic sources (`dummy`, `settling`, `worst_case`) and uses reusable helpers in `software/utils/evaluate_helpers.py`. Backbone construction is delegated to `software/utils/backbone_factory.py`.
 
+For transient behavior analysis, use `--evaluation-plot-mode transient`. You can leave animation screen-only with `--evaluation-animation-output screen`, or export it with `--evaluation-animation-output gif` or `--evaluation-animation-output video`.
+
+Example transient run with multiple backbones:
+
+```powershell
+python -m software.scripts.evaluate --input software/output/testbench/stable20mALONG.csv --backbones baseline,stddev_window,hysteresis --evaluation-plot-mode transient --evaluation-animate --evaluation-animation-output screen --out software/output/evaluate/transient-demo
+```
+
 ## `integrate.py`
 
 Programmatic API for downstream use.
