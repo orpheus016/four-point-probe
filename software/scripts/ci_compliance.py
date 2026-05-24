@@ -70,10 +70,11 @@ def check_evaluate_imports() -> bool:
         return False
     text = evaluate_path.read_text(encoding="utf-8")
     if "from ..tests.csv_replay import csv_replay_reader" in text:
-        print("ERROR: evaluate.py must import csv_replay_reader from software/utils/csv_replay.py")
+        print("ERROR: evaluate.py must not import csv_replay_reader from tests module")
         return False
-    if "from ..utils.csv_replay import csv_replay_reader" not in text:
-        print("ERROR: evaluate.py does not import csv_replay_reader from software/utils/csv_replay.py")
+    # acceptable patterns: import csv_replay from utils, or import evaluate helpers
+    if ("from ..utils.csv_replay import csv_replay_reader" not in text) and ("from ..utils.evaluate_helpers import" not in text):
+        print("ERROR: evaluate.py should either import csv_replay_reader from software/utils/csv_replay.py or use software/utils/evaluate_helpers.py")
         return False
     return True
 
@@ -120,12 +121,104 @@ def check_instructions_shape() -> bool:
     return True
 
 
+def check_duplicate_top_level_functions() -> bool:
+    """Detect duplicate top-level function names across `software/` modules.
+
+    Excludes files under `software/tests/` and any `__init__.py` files.
+    Reports names that appear as top-level `def` in more than one file.
+    """
+    ok = True
+    mapping: dict[str, list[Path]] = {}
+    for p in (ROOT / "software").rglob("*.py"):
+        rel = p.relative_to(ROOT / "software")
+        # skip tests and __init__
+        if "tests" in rel.parts:
+            continue
+        if p.name == "__init__.py":
+            continue
+        src = p.read_text(encoding="utf-8")
+        try:
+            mod = ast.parse(src)
+        except SyntaxError:
+            continue
+        for node in mod.body:
+            if isinstance(node, ast.FunctionDef):
+                mapping.setdefault(node.name, []).append(p)
+
+    # ignore common script entrypoints like 'main'
+    IGNORE_NAMES = {"main"}
+    duplicates = {name: paths for name, paths in mapping.items() if len({str(x) for x in paths}) > 1 and name not in IGNORE_NAMES}
+    if duplicates:
+        print("ERROR: duplicate top-level function names found across files:")
+        for name, paths in duplicates.items():
+            print(f" - {name}: {', '.join(str(p) for p in paths)}")
+        ok = False
+    return ok
+
+
+def check_add_argument_locations() -> bool:
+    """Ensure `add_argument` is only used inside `build_arg_parser` in config.py.
+
+    Any other usage of `add_argument` in the `software/` tree is flagged.
+    """
+    ok = True
+    config_path = (ROOT / "software" / "config" / "config.py").resolve()
+    for p in (ROOT / "software").rglob("*.py"):
+        # skip this script
+        if p.resolve() == Path(__file__).resolve():
+            continue
+        src = p.read_text(encoding="utf-8")
+        try:
+            mod = ast.parse(src)
+        except SyntaxError:
+            continue
+
+        class ArgVisitor(ast.NodeVisitor):
+            def __init__(self):
+                self.issues: list[str] = []
+                self.current_fn: Optional[str] = None
+
+            def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+                prev = self.current_fn
+                self.current_fn = node.name
+                self.generic_visit(node)
+                self.current_fn = prev
+
+            def visit_Call(self, node: ast.Call) -> None:
+                func = node.func
+                name = None
+                if isinstance(func, ast.Attribute):
+                    name = func.attr
+                elif isinstance(func, ast.Name):
+                    name = func.id
+                if name == "add_argument":
+                    # record the function context
+                    self.issues.append(self.current_fn or "<module>")
+                self.generic_visit(node)
+
+        visitor = ArgVisitor()
+        visitor.visit(mod)
+        if visitor.issues:
+            if p.resolve() != config_path:
+                print(f"ERROR: add_argument used outside config.py in {p}: functions {visitor.issues}")
+                ok = False
+            else:
+                # ensure all occurrences are inside build_arg_parser
+                for fn in visitor.issues:
+                    if fn != "build_arg_parser":
+                        print(f"ERROR: add_argument used in config.py but outside build_arg_parser (found in {fn})")
+                        ok = False
+    return ok
+
+
 def main() -> int:
     checks = [
         (check_snapshot, "Snapshot dataclass present"),
         (check_backbones, "Backbones inherit BaseBackbone"),
         (check_evaluate_imports, "Evaluate imports csv_replay from utils"),
         (check_no_duplicates, "No duplicate mean helpers"),
+        (check_duplicate_top_level_functions, "No duplicate top-level function names across modules"),
+        (check_add_argument_locations, "add_argument only in build_arg_parser of config.py"),
         (check_instructions_shape, "Instructions align with repo layout"),
     ]
     all_ok = True

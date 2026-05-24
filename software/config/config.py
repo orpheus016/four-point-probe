@@ -103,6 +103,12 @@ class CLIConfig:
     output_dir: str = "software/output"
     port: str = "COM12"
     baud: int = 115200
+    # Evaluate script specific defaults
+    input: str = "software/output/testbench"
+    out: str = "software/output/evaluate"
+    backbones: str = "stddev_window,baseline,hysteresis"
+    show: bool = False
+    filename: str = ""
 
 
 @dataclass(frozen=True)
@@ -152,6 +158,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", type=str, default=defaults.output_dir)
     parser.add_argument("--port", type=str, default=defaults.port)
     parser.add_argument("--baud", type=int, default=defaults.baud)
+    # Evaluate script specific args
+    parser.add_argument("--input", type=str, default=defaults.input, help="file or directory to read CSVs from")
+    parser.add_argument("--out", type=str, default=defaults.out, help="output directory for plots and summaries")
+    parser.add_argument("--backbones", type=str, default=defaults.backbones, help="comma-separated backbone names to evaluate")
+    parser.add_argument("--show", action="store_true", help="show interactive plots", default=defaults.show)
+    parser.add_argument("--filename", type=str, default=defaults.filename, help="Custom name for saved CSV (manual_capture)")
     return parser
 
 

@@ -16,7 +16,6 @@ from ..command.serial_commander import SerialCommander
 
 def main():
     parser = build_arg_parser()
-    parser.add_argument("--filename", type=str, default="", help="Custom name for the saved CSV file")
     args = parser.parse_args()
 
     serial_cfg = build_serial_config(args)

@@ -1,0 +1,191 @@
+"""Reusable helper functions for offline evaluation scripts.
+
+This module centralizes the evaluation pipeline pieces so scripts can import
+the same behavior without duplicating logic.
+"""
+
+from __future__ import annotations
+
+import csv
+import math
+from dataclasses import dataclass
+from itertools import islice
+from pathlib import Path
+from typing import Iterable, Iterator, List, Optional
+
+import matplotlib.pyplot as plt
+
+from ..data_source.dummy import dummy_voltage_generator
+from ..data_source.settling import settling_signal_generator
+from ..data_source.worst_case import worst_case_signal_generator
+from .backbone_factory import create_backbone
+from .csv_replay import csv_replay_reader
+from .types import Sample, Snapshot
+
+
+@dataclass
+class Metrics:
+    rmse: float
+    mae: float
+    maxabs: float
+
+
+def compute_metrics(errors: List[float]) -> Metrics:
+    if not errors:
+        return Metrics(math.nan, math.nan, math.nan)
+    mse = sum(e * e for e in errors) / len(errors)
+    rmse = math.sqrt(mse)
+    mae = sum(abs(e) for e in errors) / len(errors)
+    maxabs = max(abs(e) for e in errors)
+    return Metrics(rmse=rmse, mae=mae, maxabs=maxabs)
+
+
+def build_source_iterator_eval(source: str, sim_config, args) -> Iterator[Sample]:
+    if source == "csv":
+        csv_path = getattr(args, "input", getattr(args, "csv_path", ""))
+        return csv_replay_reader(csv_path, sample_rate_hz=sim_config.sample_rate_hz)
+
+    if source == "dummy":
+        return islice(dummy_voltage_generator(sim_config), max(1, int(sim_config.max_measurement_s * sim_config.sample_rate_hz)))
+
+    if source == "settling":
+        return islice(settling_signal_generator(sim_config), max(1, int(sim_config.max_measurement_s * sim_config.sample_rate_hz)))
+
+    if source == "worst_case":
+        return islice(worst_case_signal_generator(sim_config), max(1, int(sim_config.max_measurement_s * sim_config.sample_rate_hz)))
+
+    raise ValueError(f"unsupported evaluation source: {source}")
+
+
+def evaluate_samples(samples: Iterable[Sample], backbones: Iterable[str], sim_config, args) -> dict:
+    times: List[float] = []
+    voltages: List[float] = []
+    currents: List[float] = []
+    for t, v, i in samples:
+        times.append(t)
+        voltages.append(v)
+        currents.append(i)
+
+    results = {}
+    for bname in backbones:
+        bb = create_backbone(bname, sim_config, args)
+        snapshots: List[Snapshot] = []
+        window_samples = max(1, int(sim_config.snapshot_window_s * sim_config.sample_rate_hz))
+        for t, v, i in zip(times, voltages, currents):
+            snap = bb.update((t, v, i))
+            if snap is not None:
+                snapshots.append(snap)
+
+        decided_snapshot = snapshots[0] if snapshots else None
+
+        errors: List[float] = []
+        refs: List[float] = []
+        if decided_snapshot is not None:
+            candidate_snapshots = [decided_snapshot]
+        else:
+            candidate_snapshots = []
+
+        for snap in candidate_snapshots:
+            idx = min(range(len(times)), key=lambda k: abs(times[k] - snap.timestamp))
+            start = max(0, idx - window_samples + 1)
+            ref_mean = sum(voltages[start: idx + 1]) / max(1, idx - start + 1)
+            refs.append(ref_mean)
+            errors.append(snap.voltage - ref_mean)
+
+        metrics = compute_metrics(errors)
+        results[bname] = {
+            "snapshots": snapshots,
+            "decided_snapshot": decided_snapshot,
+            "metrics": metrics,
+            "refs": refs,
+        }
+    return {"times": times, "voltages": voltages, "currents": currents, "results": results}
+
+
+def evaluate_file(csv_path: str, backbones: Iterable[str], sim_config, args) -> dict:
+    return evaluate_samples(csv_replay_reader(csv_path, sample_rate_hz=sim_config.sample_rate_hz), backbones, sim_config, args)
+
+
+def plot_results(base_out: Path, name: str, data: dict, show: bool = False) -> None:
+    voltages = data["voltages"]
+    currents = data["currents"]
+    results = data["results"]
+
+    plt.figure(figsize=(9, 4))
+    plt.plot(currents, voltages, label="measured", lw=1.2)
+
+    for bname, info in results.items():
+        snaps: List[Snapshot] = info["snapshots"]
+        decided_snapshot: Optional[Snapshot] = info.get("decided_snapshot")
+        if snaps:
+            plt.scatter(
+                [s.current_mA for s in snaps],
+                [s.voltage for s in snaps],
+                label=f"{bname} snapshots",
+                s=18,
+            )
+        if decided_snapshot is not None:
+            plt.scatter(
+                [decided_snapshot.current_mA],
+                [decided_snapshot.voltage],
+                marker="*",
+                s=180,
+                label=f"{bname} decided snapshot",
+                zorder=5,
+            )
+
+    plt.xlabel("Current (mA)")
+    plt.ylabel("Voltage (V)")
+    plt.title(f"IV comparison: {name}")
+    plt.legend()
+    out_png = base_out / f"{Path(name).stem}.png"
+    plt.tight_layout()
+    plt.savefig(out_png)
+    if show:
+        plt.show()
+    plt.close()
+
+
+def write_summary(base_out: Path, name: str, data: dict) -> None:
+    out_csv = base_out / f"{Path(name).stem}-metrics.csv"
+    with out_csv.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow([
+            "backbone",
+            "decided_snapshot",
+            "decided_timestamp",
+            "decided_voltage",
+            "decided_current_mA",
+            "decided_resistance",
+            "decided_std_dev",
+            "decided_stage",
+            "rmse",
+            "mae",
+            "maxabs",
+            "num_snapshots",
+        ])
+        for bname, info in data["results"].items():
+            m = info["metrics"]
+            decided_snapshot: Optional[Snapshot] = info.get("decided_snapshot")
+            if decided_snapshot is None:
+                decided_values = ["", "", "", "", "", "", ""]
+                selected_marker = ""
+            else:
+                selected_marker = "*"
+                decided_values = [
+                    f"{decided_snapshot.timestamp:.6f}",
+                    f"{decided_snapshot.voltage:.8f}",
+                    f"{decided_snapshot.current_mA:.8f}",
+                    "" if decided_snapshot.resistance is None else f"{decided_snapshot.resistance:.8f}",
+                    "" if decided_snapshot.std_dev is None else f"{decided_snapshot.std_dev:.8f}",
+                    "" if decided_snapshot.stage is None else decided_snapshot.stage,
+                ]
+            writer.writerow([
+                bname,
+                selected_marker,
+                *decided_values,
+                m.rmse,
+                m.mae,
+                m.maxabs,
+                len(info["snapshots"]),
+            ])
