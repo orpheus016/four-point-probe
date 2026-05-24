@@ -243,3 +243,26 @@ Pointers:
 - CLI defaults and all flags live in `software/config/config.py`.
 - Reusable evaluation utilities are in `software/utils/evaluate_helpers.py`.
 - Use `software/utils/backbone_factory.py` to construct backbones consistently across `main.py` and evaluation scripts.
+
+### Output Folder Structure
+
+output offline eval structure
+```bash
+output/evaluate/[data_source(.py/.csv)]/
+|
+-- transient-demo
+|	|
+|	-- [backbone name] (specific transient backbone)
+|
+-- [backbone name] (specific static backbone)
+|
+-- .png and.csv of all backbone
+```
+
+output/ads1256 for online evaluation with hardware
+
+output/testbench for manual capture dataset from hardware
+
+## CI Contract
+
+TBA
