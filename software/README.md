@@ -149,3 +149,69 @@ Use the csv_replay generator to replay existing datasets in the same format as t
 ### Auto Capture
 
 You can use ads1256 capture for more automated data collection. this data_source is going to be integrated into the automated four point probe system measurement
+
+## Offline evaluation (evaluate.py)
+
+You can run the offline evaluator against either recorded CSVs or the built-in synthetic generators (`dummy`, `settling`, `worst_case`). The evaluator is useful for batch comparisons and produces a per-run PNG and a `*-metrics.csv` file with simple snapshot metrics and a marker for the decided snapshot.
+
+Examples (run from the repo root):
+
+- Dummy source (5 s at 50 Hz, compare two backbones):
+
+```bash
+python -m software.scripts.evaluate --source dummy \
+   --max-measurement 5 --sample-rate 50 \
+   --backbones stddev_window,baseline \
+   --out software/output/evaluate
+```
+
+- Settling source (3 s at 100 Hz, baseline only):
+
+```bash
+python -m software.scripts.evaluate --source settling \
+   --max-measurement 3 --sample-rate 100 \
+   --backbones baseline \
+   --out software/output/evaluate
+```
+
+- Worst-case source (10 s, full compare):
+
+```bash
+python -m software.scripts.evaluate --source worst_case \
+   --max-measurement 10 --sample-rate 50 \
+   --backbones stddev_window,baseline,hysteresis \
+   --out software/output/evaluate
+```
+
+- Manual Capture
+```bash
+python -m software.scripts.evaluate --input software/output/testbench/stable20mALONG.csv --backbones baseline --out software/output/evaluate/baseline-stable20mALONG
+```
+
+Key flags:
+- `--source`: `csv`, `dummy`, `settling`, or `worst_case`.
+- `--max-measurement`: maximum generator duration (seconds) for synthetic sources.
+- `--sample-rate`: sample frequency used by synthetic generators.
+- `--backbones`: comma-separated backbone names to run (e.g. `baseline`).
+- `--show`: display interactive plots (omit for CI/headless runs).
+
+Outputs created:
+- `--out`/`<name>.png` — IV comparison plot with decided snapshot marked.
+- `--out`/`<name>-metrics.csv` — CSV summary with decided snapshot metadata and metrics (RMSE, MAE, MaxAbs).
+
+Programmatic usage (call helpers directly):
+
+```python
+from software.config.config import build_arg_parser, build_simulation_config
+from software.utils.evaluate_helpers import build_source_iterator_eval, evaluate_samples
+
+args = build_arg_parser().parse_args(['--source','dummy','--max-measurement','2'])
+sim = build_simulation_config(args)
+samples = build_source_iterator_eval('dummy', sim, args)
+data = evaluate_samples(samples, ['baseline'], sim, args)
+```
+
+Pointers:
+- CLI defaults and all flags live in `software/config/config.py`.
+- Reusable evaluation utilities are in `software/utils/evaluate_helpers.py`.
+- Use `software/utils/backbone_factory.py` to construct backbones consistently across `main.py` and evaluation scripts.

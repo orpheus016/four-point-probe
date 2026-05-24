@@ -9,6 +9,74 @@ import matplotlib
 matplotlib.use("Agg", force=True)
 
 
+def test_evaluate_chooses_last_emitted_snapshot(monkeypatch):
+    from software.config.config import SimulationConfig
+    from software.utils import evaluate_helpers as evaluate_helpers_module
+    from software.utils.types import Snapshot
+
+    class FakeBackbone:
+        def __init__(self):
+            self._count = 0
+
+        def update(self, sample):
+            self._count += 1
+            if self._count == 2:
+                return Snapshot(timestamp=sample[0], voltage=1.0, current_mA=10.0)
+            if self._count == 4:
+                return Snapshot(timestamp=sample[0], voltage=2.0, current_mA=10.0)
+            return None
+
+    monkeypatch.setattr(evaluate_helpers_module, "create_backbone", lambda *args, **kwargs: FakeBackbone())
+
+    sim_config = SimulationConfig(sample_rate_hz=10.0, snapshot_window_s=1.0, snapshot_min_duration_s=0.1)
+    samples = [
+        (0.0, 0.1, 10.0),
+        (0.1, 0.2, 10.0),
+        (0.2, 0.3, 10.0),
+        (0.3, 0.4, 10.0),
+    ]
+
+    class Args:
+        hysteresis_enter = 1.0
+        hysteresis_exit = 0.8
+
+    data = evaluate_helpers_module.evaluate_samples(samples, ["baseline"], sim_config, Args())
+    decided = data["results"]["baseline"]["decided_snapshot"]
+
+    assert decided is not None
+    assert decided.voltage == 2.0
+
+
+def test_evaluate_falls_back_to_final_sample_when_no_snapshot(monkeypatch):
+    from software.config.config import SimulationConfig
+    from software.utils import evaluate_helpers as evaluate_helpers_module
+
+    class FakeBackbone:
+        def update(self, sample):
+            return None
+
+    monkeypatch.setattr(evaluate_helpers_module, "create_backbone", lambda *args, **kwargs: FakeBackbone())
+
+    sim_config = SimulationConfig(sample_rate_hz=10.0, snapshot_window_s=1.0, snapshot_min_duration_s=0.1)
+    samples = [
+        (0.0, 0.1, 10.0),
+        (0.1, 0.2, 10.0),
+        (0.2, 0.3, 10.0),
+    ]
+
+    class Args:
+        hysteresis_enter = 1.0
+        hysteresis_exit = 0.8
+
+    data = evaluate_helpers_module.evaluate_samples(samples, ["baseline"], sim_config, Args())
+    decided = data["results"]["baseline"]["decided_snapshot"]
+
+    assert decided is not None
+    assert decided.timestamp == 0.2
+    assert decided.voltage == 0.3
+    assert decided.current_mA == 10.0
+
+
 def test_evaluate_single_dataset_smoke(tmp_path):
     from software.scripts.evaluate import evaluate_file, plot_results, write_summary
     from software.config.config import SimulationConfig

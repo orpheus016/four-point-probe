@@ -20,6 +20,8 @@ python -m software.scripts.evaluate --input software/output/testbench --backbone
 
 The script reads CSV replay data from `software/utils/csv_replay.py`, runs each backbone in isolation, and writes PNG and CSV summary outputs.
 
+Note: `evaluate.py` also supports the built-in synthetic sources (`dummy`, `settling`, `worst_case`) and uses reusable helpers in `software/utils/evaluate_helpers.py`. Backbone construction is delegated to `software/utils/backbone_factory.py`.
+
 ## `integrate.py`
 
 Programmatic API for downstream use.

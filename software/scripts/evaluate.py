@@ -8,9 +8,9 @@ and written into the metrics CSV.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import List, Optional
 
-from ..config.config import build_simulation_config, build_arg_parser
+from ..config.config import build_arg_parser, build_simulation_config
 from ..utils.evaluate_helpers import (
 	build_source_iterator_eval as build_source_iterator,
 	evaluate_file,
@@ -18,11 +18,19 @@ from ..utils.evaluate_helpers import (
 	plot_results,
 	write_summary,
 )
-from ..utils.types import Sample, Snapshot
 
 
+def _resolve_source(args) -> str:
+	input_path = Path(args.input)
+	if args.source == "dummy" and input_path.exists():
+		return "csv"
+	return args.source
 
 
+def _collect_input_files(input_path: Path) -> List[Path]:
+	if input_path.is_dir():
+		return sorted(input_path.glob("*.csv"))
+	return [input_path]
 
 
 def main(argv: Optional[List[str]] = None) -> None:
@@ -32,27 +40,23 @@ def main(argv: Optional[List[str]] = None) -> None:
 	sim_config = build_simulation_config(args)
 	out_dir = Path(args.out)
 	out_dir.mkdir(parents=True, exist_ok=True)
+	source = _resolve_source(args)
 
 	files: List[Path] = []
-	if args.source == "csv":
-		input_path = Path(args.input)
-		if input_path.is_dir():
-			for p in sorted(input_path.glob("*.csv")):
-				files.append(p)
-		else:
-			files.append(input_path)
+	if source == "csv":
+		files = _collect_input_files(Path(args.input))
 
 	backbones = [b.strip() for b in args.backbones.split(",") if b.strip()]
 
-	if args.source == "csv":
+	if source == "csv":
 		for f in files:
 			data = evaluate_file(str(f), backbones, sim_config, args)
 			plot_results(out_dir, str(f), data, show=args.show)
 			write_summary(out_dir, str(f), data)
 	else:
-		samples = build_source_iterator(args.source, sim_config, args)
+		samples = build_source_iterator(source, sim_config, args)
 		data = evaluate_samples(samples, backbones, sim_config, args)
-		output_name = f"{args.source}-{Path(args.input).stem if args.input else args.source}"
+		output_name = f"{source}-{Path(args.input).stem if args.input else source}"
 		plot_results(out_dir, output_name, data, show=args.show)
 		write_summary(out_dir, output_name, data)
 

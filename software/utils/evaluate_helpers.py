@@ -57,6 +57,31 @@ def build_source_iterator_eval(source: str, sim_config, args) -> Iterator[Sample
     raise ValueError(f"unsupported evaluation source: {source}")
 
 
+def _build_fallback_snapshot(times: List[float], voltages: List[float], currents: List[float]) -> Optional[Snapshot]:
+    if not times:
+        return None
+    timestamp = times[-1]
+    voltage = voltages[-1]
+    current_mA = currents[-1]
+    resistance = None
+    if current_mA > 0.0:
+        resistance = voltage / (current_mA / 1000.0)
+    return Snapshot(
+        timestamp=timestamp,
+        voltage=voltage,
+        current_mA=current_mA,
+        resistance=resistance,
+        std_dev=None,
+        stage=None,
+    )
+
+
+def _select_decided_snapshot(snapshots: List[Snapshot], times: List[float], voltages: List[float], currents: List[float]) -> Optional[Snapshot]:
+    if snapshots:
+        return snapshots[-1]
+    return _build_fallback_snapshot(times, voltages, currents)
+
+
 def evaluate_samples(samples: Iterable[Sample], backbones: Iterable[str], sim_config, args) -> dict:
     times: List[float] = []
     voltages: List[float] = []
@@ -76,7 +101,7 @@ def evaluate_samples(samples: Iterable[Sample], backbones: Iterable[str], sim_co
             if snap is not None:
                 snapshots.append(snap)
 
-        decided_snapshot = snapshots[0] if snapshots else None
+        decided_snapshot = _select_decided_snapshot(snapshots, times, voltages, currents)
 
         errors: List[float] = []
         refs: List[float] = []
@@ -130,6 +155,7 @@ def plot_results(base_out: Path, name: str, data: dict, show: bool = False) -> N
                 [decided_snapshot.voltage],
                 marker="*",
                 s=180,
+                color="orange",
                 label=f"{bname} decided snapshot",
                 zorder=5,
             )
