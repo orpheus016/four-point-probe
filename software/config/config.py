@@ -73,7 +73,7 @@ class OutputConfig:
 @dataclass(frozen=True)
 class CLIConfig:
     source: str = "dummy"
-    backbone: str = "stddev_window"
+    backbone: str = "running_stat"
     csv_path: str = "software/output/testbench/input.csv"
     sample_rate_hz: float = SimulationConfig.sample_rate_hz
     window_seconds: float = SimulationConfig.window_seconds
@@ -129,7 +129,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     defaults = CLIConfig()
     parser = argparse.ArgumentParser(description="Simulated ADS1256 voltage acquisition")
     parser.add_argument("--source", choices=["dummy", "serial", "csv", "settling", "worst_case"], default=defaults.source)
-    parser.add_argument("--backbone", choices=["stddev_window", "baseline", "hysteresis"], default=defaults.backbone)
+    parser.add_argument("--backbone", choices=["running_stat", "stddev_window", "baseline", "hysteresis"], default=defaults.backbone)
     parser.add_argument("--csv-path", type=str, default=defaults.csv_path)
     parser.add_argument("--sample-rate", type=float, default=defaults.sample_rate_hz)
     parser.add_argument("--window-seconds", type=float, default=defaults.window_seconds)

@@ -2,6 +2,24 @@
 
 This folder contains the repository's developer-facing entrypoints.
 
+## `backbone_workflow.py`
+
+Scaffold a new backbone, update the registry files, and run compliance.
+
+Dry-run example:
+
+```powershell
+python software/scripts/backbone_workflow.py running_stat --dry-run
+```
+
+Apply changes and run compliance:
+
+```powershell
+python software/scripts/backbone_workflow.py running_stat
+```
+
+The helper updates `software/config/config.py`, `software/utils/backbone_factory.py`, and `software/backbones/__init__.py`, then runs `software/scripts/ci_compliance.py`. If a matching `software/tests/test_<name>.py` file exists, it runs that test file too.
+
 ## `evaluate.py`
 
 Offline evaluation over CSV testbench data.
@@ -27,7 +45,7 @@ For transient behavior analysis, use `--evaluation-plot-mode transient`. You can
 Example transient run with multiple backbones:
 
 ```powershell
-python -m software.scripts.evaluate --input software/output/testbench/stable20mALONG.csv --backbones baseline,stddev_window,hysteresis --evaluation-plot-mode transient --evaluation-animate --evaluation-animation-output screen --out software/output/evaluate/transient-demo
+python -m software.scripts.evaluate --input software/output/testbench/stable20mALONG.csv --backbones running_stat,baseline,stddev_window,hysteresis --evaluation-plot-mode transient --evaluation-animate --evaluation-animation-output screen --out software/output/evaluate/transient-demo
 ```
 
 ## `integrate.py`
@@ -52,4 +70,4 @@ Run it directly:
 python software/scripts/ci_compliance.py
 ```
 
-The checker validates the current repository shape against `copilot-instructions.md`, including `Snapshot`, backbone inheritance, CSV replay imports, and duplicate helper cleanup.
+The checker validates the current repository shape against `copilot-instructions.md`, including `Snapshot`, backbone inheritance, CSV replay imports, duplicate helper cleanup, and the `add_argument` location rule.

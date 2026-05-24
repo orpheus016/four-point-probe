@@ -13,6 +13,8 @@ capture a frozen snapshot of the measurement.
    - Abstract streaming interface: `update(sample) -> Optional[Snapshot]`.
 - `backbones/stddev_window.py`
    - Sliding-window stability detector with incremental variance.
+- `backbones/running_stat.py`
+   - Running-stat snapshot strategy with the same streaming backbone contract.
 - `backbones/baseline.py`
    - Baseline snapshot strategy built on the sliding-window stddev rule.
 - `backbones/hysteresis.py`
@@ -53,6 +55,8 @@ capture a frozen snapshot of the measurement.
    - Library-style entrypoints for downstream systems.
 - `scripts/ci_compliance.py`
    - Lightweight architecture and cleanup checker used by CI.
+- `scripts/backbone_workflow.py`
+   - Fail-fast helper that scaffolds backbone registry updates and runs compliance.
 - `scripts/README.md`
    - Developer guide for script entrypoints and command examples.
 - `tests/test_evaluate.py`
@@ -65,8 +69,8 @@ capture a frozen snapshot of the measurement.
 ## Run from repo root
 Examples showing common runs. Use `--help` for full CLI options.
 
-1. One-shot measurement using the default `baseline` strategy:
-   python -m software.main --source dummy --backbone baseline --current 0.01 --resistance 1.5 \
+1. One-shot measurement using the default `running_stat` strategy:
+   python -m software.main --source dummy --backbone running_stat --current 0.01 --resistance 1.5 \
       --snapshot-threshold 0.0004 --snapshot-window 2.0 --snapshot-min-duration 2.0
 
 2. Hysteresis-based snapshot with explicit enter/exit thresholds:
@@ -75,21 +79,22 @@ Examples showing common runs. Use `--help` for full CLI options.
 
 3. Replay a CSV testbench dataset and log outputs to `software/output/testbench`:
    python -m software.main --source csv --csv-path software/output/testbench/stable20mA.csv \
-      --backbone stddev_window --stop-on-snapshot
+      --backbone running_stat --stop-on-snapshot
 
    Single backbone on a single dataset:
    python -m software.scripts.evaluate --input software/output/testbench/stable20mA.csv \
-      --backbones baseline --out software/output/evaluate/baseline-stable20mA
+      --backbones running_stat --out software/output/evaluate/running_stat-stable20mA
 
    Batch evaluate the whole testbench folder:
    python -m software.scripts.evaluate --input software/output/testbench \
-      --backbones stddev_window,baseline,hysteresis --out software/output/evaluate/batch
+      --backbones running_stat,stddev_window,baseline,hysteresis --out software/output/evaluate/batch
 
 4. Use the hardware ADS1256 input (COM port configured via `--port`):
    python -m software.main --source serial --port COM5 --baud 115200 --backbone baseline
 
 Notes:
 - Snapshot detection strategies live in `software/backbones/` and implement `update(sample) -> Optional[Snapshot]`.
+- `running_stat.py` is the import-safe running-stat backbone implementation; the legacy hyphenated helper file was removed so CI only sees valid modules.
 - Runtime parameters and CLI defaults are centralized in `software/config/config.py`.
 - Outputs are routed into `software/output/<source>` to keep hardware and testbench logs separate.
 - The preferred developer workflow lives in [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts README](scripts/README.md).
@@ -157,11 +162,12 @@ You can run the offline evaluator against either recorded CSVs or the built-in s
 Examples (run from the repo root):
 
 - Dummy source (5 s at 50 Hz, compare two backbones):
+- Dummy source (5 s at 50 Hz, compare the new running-stat backbone against the existing strategies):
 
 ```bash
 python -m software.scripts.evaluate --source dummy \
    --max-measurement 5 --sample-rate 50 \
-   --backbones stddev_window,baseline \
+   --backbones running_stat,stddev_window,baseline \
    --out software/output/evaluate
 ```
 
@@ -179,7 +185,7 @@ python -m software.scripts.evaluate --source settling \
 ```bash
 python -m software.scripts.evaluate --source worst_case \
    --max-measurement 10 --sample-rate 50 \
-   --backbones stddev_window,baseline,hysteresis \
+   --backbones running_stat,stddev_window,baseline,hysteresis \
    --out software/output/evaluate
 ```
 
@@ -191,7 +197,7 @@ python -m software.scripts.evaluate --input software/output/testbench/stable20mA
 - Transient playback with animation shown on screen only:
 ```bash
 python -m software.scripts.evaluate --input software/output/testbench/stable20mALONG.csv \
-   --backbones baseline,stddev_window,hysteresis \
+   --backbones running_stat,baseline,stddev_window,hysteresis \
    --evaluation-plot-mode transient --evaluation-animate --evaluation-animation-output screen \
    --out software/output/evaluate/transient-demo
 ```
@@ -199,7 +205,7 @@ python -m software.scripts.evaluate --input software/output/testbench/stable20mA
 - Transient playback exported to GIF or video:
 ```bash
 python -m software.scripts.evaluate --input software/output/testbench/stable20mALONG.csv \
-   --backbones baseline,stddev_window,hysteresis \
+   --backbones running_stat,baseline,stddev_window,hysteresis \
    --evaluation-plot-mode transient --evaluation-animate --evaluation-animation-output gif \
    --out software/output/evaluate/transient-gif
 ```
@@ -208,7 +214,7 @@ Key flags:
 - `--source`: `csv`, `dummy`, `settling`, or `worst_case`.
 - `--max-measurement`: maximum generator duration (seconds) for synthetic sources.
 - `--sample-rate`: sample frequency used by synthetic generators.
-- `--backbones`: comma-separated backbone names to run (e.g. `baseline`).
+- `--backbones`: comma-separated backbone names to run (e.g. `running_stat,baseline`).
 - `--show`: display interactive plots (omit for CI/headless runs).
 - `--evaluation-plot-mode`: `comparison` for IV plots or `transient` for time-based playback.
 - `--evaluation-animate`: enable incremental playback in transient mode.
@@ -219,6 +225,7 @@ Outputs created:
 - `--out`/`<name>.png` — IV comparison plot, or transient plot when `--evaluation-plot-mode transient` is selected.
 - `--out`/`<name>.gif` or `--out`/`<name>.mp4` — exported animation when the output mode is set accordingly.
 - `--out`/`<name>-metrics.csv` — CSV summary with decided snapshot metadata and metrics (RMSE, MAE, MaxAbs).
+- `software/scripts/backbone_workflow.py` can scaffold registry updates for a new backbone name, create a module stub if needed, and then run compliance plus tests.
 
 Programmatic usage (call helpers directly):
 

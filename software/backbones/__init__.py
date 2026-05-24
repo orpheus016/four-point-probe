@@ -4,5 +4,6 @@ from .base import BaseBackbone
 from .stddev_window import StdDevWindowBackbone
 from .hysteresis import HysteresisBackbone
 from .baseline import BaselineBackbone
+from .running_stat import RunningStatBackbone
 
-__all__ = ["BaseBackbone", "StdDevWindowBackbone", "HysteresisBackbone", "BaselineBackbone"]
+__all__ = ["BaseBackbone", "StdDevWindowBackbone", "HysteresisBackbone", "BaselineBackbone", "RunningStatBackbone"]

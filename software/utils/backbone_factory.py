@@ -10,6 +10,7 @@ from typing import Any
 
 from ..backbones.baseline import BaselineBackbone
 from ..backbones.hysteresis import HysteresisBackbone
+from ..backbones.running_stat import RunningStatBackbone
 from ..backbones.stddev_window import StdDevWindowBackbone
 
 
@@ -23,6 +24,9 @@ def create_backbone(name: str, sim_config: Any, args: Any = None) -> object:
 
     if name == "baseline":
         return BaselineBackbone(max(2, window_samples), sim_config.snapshot_std_threshold_v, min_stable_samples, min_recording_samples)
+
+    if name == "running_stat":
+        return RunningStatBackbone(max(2, window_samples), sim_config.snapshot_std_threshold_v, min_stable_samples, min_recording_samples)
 
     if name == "hysteresis":
         enter = getattr(args, "hysteresis_enter", 1.0) if args is not None else 1.0

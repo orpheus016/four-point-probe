@@ -23,6 +23,7 @@ Before opening a PR, run the same checks locally and keep the output clean:
 2. Run the test suite.
 3. Run the compliance checker.
 4. Update the docs if you changed CLI flags, scripts, or file locations.
+5. When adding a new backbone, use `software/scripts/backbone_workflow.py <name>` to scaffold the registry changes, then rerun the same checks locally.
 
 Run the suite from the repository root so paths match CI:
 
