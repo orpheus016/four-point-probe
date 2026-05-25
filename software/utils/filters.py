@@ -23,6 +23,10 @@ class MovingAverageFilter:
         self._sum += value
         return self._sum / len(self._values)
 
+    def reset(self) -> None:
+        self._values.clear()
+        self._sum = 0.0
+
 
 class LowPassFilter:
     """Single-pole low-pass filter: y[n] = a*x[n] + (1-a)*y[n-1]."""
@@ -42,6 +46,10 @@ class LowPassFilter:
         filtered = (self._alpha * value) + ((1.0 - self._alpha) * self._prev)
         self._prev = filtered
         return filtered
+
+    def reset(self) -> None:
+        self._initialized = False
+        self._prev = 0.0
 
 '''
 Implement Switching Kalman Filter

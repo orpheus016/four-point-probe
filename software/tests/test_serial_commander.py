@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from software.data_source.ads1256 import ads1256_reader
 from software.command.serial_commander import SerialCommander
-from software.config.config import SerialConfig, StreamMarkersConfig
+from software.config.config import CurrentSwitchConfig, SerialConfig, StreamMarkersConfig
 
 
 class _FakeSerial:
@@ -110,3 +110,58 @@ def test_ads1256_reader_skips_startup_banners_before_stream_start(monkeypatch) -
         pass
     else:
         raise AssertionError("expected StopIteration after stream stop marker")
+
+
+def test_decide_stage_downshifts_until_power_ok() -> None:
+    switch = CurrentSwitchConfig(
+        current_mA_by_stage=(4.0, 8.0, 12.0, 20.0),
+        power_limit_mw=5.0,
+        min_voltage_v=0.001,
+        headroom_v=2.0,
+        raise_low_v_by_stage=(0.3, 0.25, 0.15, 0.0),
+        raise_high_v_by_stage=(0.35, 0.3, 0.2, 0.0),
+        blanking_s=0.5,
+        max_settle_s=1.0,
+    )
+    config = SerialConfig(current_switch=switch)
+    commander = SerialCommander(config)
+    commander._serial = _FakeSerial([])
+    commander._current_stage = 3
+
+    decision = commander.decide_stage(1.0, 20.0)
+
+    assert decision.stage == 0
+    assert decision.switched is True
+    assert commander.current_stage() == 0
+    assert commander._serial.written[-1] == b"i0"
+
+
+def test_decide_stage_raise_uses_hysteresis_band() -> None:
+    switch = CurrentSwitchConfig(
+        current_mA_by_stage=(4.0, 8.0, 12.0, 20.0),
+        power_limit_mw=5.0,
+        min_voltage_v=0.001,
+        headroom_v=2.0,
+        raise_low_v_by_stage=(0.3, 0.25, 0.15, 0.0),
+        raise_high_v_by_stage=(0.35, 0.3, 0.2, 0.0),
+        blanking_s=0.5,
+        max_settle_s=1.0,
+    )
+    config = SerialConfig(current_switch=switch)
+    commander = SerialCommander(config)
+    commander._serial = _FakeSerial([])
+    commander._current_stage = 0
+
+    decision = commander.decide_stage(0.29, 4.0)
+
+    assert decision.stage == 1
+    assert decision.switched is True
+    assert commander.current_stage() == 1
+
+    decision = commander.decide_stage(0.27, 8.0)
+    assert decision.stage == 1
+    assert decision.switched is False
+
+    decision = commander.decide_stage(0.0005, 8.0)
+    assert decision.stage == 1
+    assert decision.switched is False

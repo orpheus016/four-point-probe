@@ -60,10 +60,10 @@ class CurrentSwitchConfig:
     power_limit_mw: float = 5.0
     min_voltage_v: float = 0.001
     headroom_v: float = 2.0
-    stage0_raise_threshold_v: float = 0.3
-    stage1_raise_threshold_v: float = 0.25
-    stage2_raise_threshold_v: float = 0.15
-    stage3_raise_threshold_v: float = 0.0
+    raise_low_v_by_stage: Tuple[float, float, float, float] = (0.3, 0.25, 0.15, 0.0)
+    raise_high_v_by_stage: Tuple[float, float, float, float] = (0.35, 0.3, 0.2, 0.0)
+    blanking_s: float = 0.5
+    max_settle_s: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -115,6 +115,14 @@ class CLIConfig:
     output_dir: str = "software/output"
     port: str = "COM12"
     baud: int = 115200
+    switch_currents: str = "4.0,8.0,12.0,20.0"
+    switch_raise_low: str = "0.3,0.25,0.15,0.0"
+    switch_raise_high: str = "0.35,0.3,0.2,0.0"
+    switch_power_limit_mw: float = CurrentSwitchConfig.power_limit_mw
+    switch_min_voltage_v: float = CurrentSwitchConfig.min_voltage_v
+    switch_headroom_v: float = CurrentSwitchConfig.headroom_v
+    switch_blanking_s: float = CurrentSwitchConfig.blanking_s
+    switch_max_settle_s: float = CurrentSwitchConfig.max_settle_s
     # Evaluate script specific defaults
     input: str = "software/output/testbench"
     out: str = "software/output/evaluate"
@@ -131,6 +139,13 @@ class SerialConfig:
     markers: StreamMarkersConfig = StreamMarkersConfig()
     protocol: SerialProtocolConfig = SerialProtocolConfig()
     current_switch: CurrentSwitchConfig = CurrentSwitchConfig()
+
+
+def _parse_float_tuple(value: str, expected_len: int, label: str) -> Tuple[float, ...]:
+    parts = [item.strip() for item in value.split(",") if item.strip()]
+    if len(parts) != expected_len:
+        raise ValueError(f"{label} expects {expected_len} comma-separated values, got {len(parts)}")
+    return tuple(float(item) for item in parts)
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -180,6 +195,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", type=str, default=defaults.output_dir)
     parser.add_argument("--port", type=str, default=defaults.port)
     parser.add_argument("--baud", type=int, default=defaults.baud)
+    parser.add_argument("--switch-currents", type=str, default=defaults.switch_currents, help="comma-separated current stages in mA")
+    parser.add_argument("--switch-raise-low", type=str, default=defaults.switch_raise_low, help="comma-separated raise low thresholds in V")
+    parser.add_argument("--switch-raise-high", type=str, default=defaults.switch_raise_high, help="comma-separated raise high thresholds in V")
+    parser.add_argument("--switch-power-limit-mw", type=float, default=defaults.switch_power_limit_mw)
+    parser.add_argument("--switch-min-voltage", type=float, default=defaults.switch_min_voltage_v)
+    parser.add_argument("--switch-headroom", type=float, default=defaults.switch_headroom_v)
+    parser.add_argument("--switch-blanking", type=float, default=defaults.switch_blanking_s)
+    parser.add_argument("--switch-max-settle", type=float, default=defaults.switch_max_settle_s)
     # Evaluate script specific args
     parser.add_argument("--input", type=str, default=defaults.input, help="file or directory to read CSVs from")
     parser.add_argument("--out", type=str, default=defaults.out, help="output directory for plots and summaries")
@@ -217,4 +240,18 @@ def build_simulation_config(args: argparse.Namespace) -> SimulationConfig:
 
 
 def build_serial_config(args: argparse.Namespace) -> SerialConfig:
-    return SerialConfig(port=args.port, baud_rate=args.baud)
+    defaults = CurrentSwitchConfig()
+    currents = _parse_float_tuple(args.switch_currents, len(defaults.current_mA_by_stage), "switch-currents")
+    raise_low = _parse_float_tuple(args.switch_raise_low, len(defaults.raise_low_v_by_stage), "switch-raise-low")
+    raise_high = _parse_float_tuple(args.switch_raise_high, len(defaults.raise_high_v_by_stage), "switch-raise-high")
+    current_switch = CurrentSwitchConfig(
+        current_mA_by_stage=currents,
+        power_limit_mw=args.switch_power_limit_mw,
+        min_voltage_v=args.switch_min_voltage,
+        headroom_v=args.switch_headroom,
+        raise_low_v_by_stage=raise_low,
+        raise_high_v_by_stage=raise_high,
+        blanking_s=args.switch_blanking,
+        max_settle_s=args.switch_max_settle,
+    )
+    return SerialConfig(port=args.port, baud_rate=args.baud, current_switch=current_switch)

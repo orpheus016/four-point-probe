@@ -138,6 +138,8 @@ Notes:
 - For live acquisition, `--plot-mode full` is the most useful setting because it shows the running trace instead of only the end-state comparison.
 - When a snapshot exists and the run ends, the final comparison image is saved next to the CSV as `*_final.png`.
 - Serial runs also save a combined transient plot next to the CSV as `<csv_stem>_transient.png`.
+- Serial current switching is snapshot-driven: switching only evaluates on stable snapshots (or a forced snapshot after `--switch-max-settle`). A blanking window (`--switch-blanking`) resets filters and backbones after a stage change before stability checks resume.
+- Voltage-based raise thresholds use per-stage hysteresis bands (`--switch-raise-low` and `--switch-raise-high`), while power-limit downshifts apply at all stages (`--switch-power-limit-mw`).
 - The preferred developer workflow lives in [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts README](scripts/README.md).
 
 ## Snapshot function: where it is and how it works

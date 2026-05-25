@@ -20,7 +20,7 @@ import os
 from pathlib import Path
 from .utils.types import Sample, Snapshot
 from .utils.backbone_factory import create_backbone
-from .utils.math import mean_rms
+from .utils.math import mean_rms, mean_std
 from .utils.evaluate_helpers import evaluate_samples
 
 
@@ -39,6 +39,22 @@ def _resolve_output_root(args) -> str:
 
 def _build_run_name(now: datetime) -> str:
     return f"volt_log_{now.strftime('%Y%m%d_%H%M%S')}"
+
+
+def _forced_snapshot_from_buffer(elapsed_s: float, current_mA: float, buffer: Deque[float]) -> Optional[Snapshot]:
+    mean, std_dev = mean_std(buffer)
+    if mean is None:
+        return None
+    resistance = None
+    if current_mA > 0.0:
+        resistance = mean / (current_mA / 1000.0)
+    return Snapshot(
+        timestamp=elapsed_s,
+        voltage=mean,
+        current_mA=current_mA,
+        resistance=resistance,
+        std_dev=std_dev,
+    )
 
 
 def build_source_iterator(args, sim_config):
@@ -103,10 +119,12 @@ def main() -> None:
     logger = CsvLogger(run_dir, filename=run_filename)
 
     commander: SerialCommander | None = None
+    switch_policy = None
     # for serial source, create a commander and pass it into the reader so main
     # can signal stage changes when a Snapshot is emitted
     if args.source == "serial":
         serial_config = build_serial_config(args)
+        switch_policy = serial_config.current_switch
         commander = SerialCommander(serial_config)
         # do not start the stream here; ads1256_reader will open the port and
         # perform startup sequence when owner=True. We pass the commander so
@@ -123,6 +141,10 @@ def main() -> None:
     last_snapshot_value: Optional[float] = None
     last_snapshots: dict[str, Optional[Snapshot]] = {name: None for name in backbone_names}
     snapshots_by_backbone: dict[str, list[Snapshot]] = {name: [] for name in backbone_names}
+    stage_start_s: Optional[float] = None
+    blanking_until_s: Optional[float] = None
+    force_snapshot_at_s: Optional[float] = None
+    stage_snapshot_seen = False
     duration_s = None
     if multi_mode:
         duration_s = args.live_duration if args.live_duration > 0.0 else sim_config.max_measurement_s
@@ -145,17 +167,54 @@ def main() -> None:
             buffer.append(filtered)
             mean, rms = mean_rms(buffer)
 
-            if multi_mode:
-                for name, backbone in backbone_instances.items():
-                    snapshot = backbone.update((elapsed_sample_s, filtered, current_mA))
-                    if snapshot is not None:
-                        snapshots_by_backbone[name].append(snapshot)
-                        last_snapshots[name] = snapshot
+            if switch_policy is not None and stage_start_s is None:
+                stage_start_s = elapsed_sample_s
+                blanking_until_s = stage_start_s + switch_policy.blanking_s
+                force_snapshot_at_s = stage_start_s + switch_policy.max_settle_s
 
-                primary_snapshot = last_snapshots.get(primary_backbone_name)
-                if primary_snapshot is not None and commander is not None:
+            in_blanking = False
+            force_snapshot_due = False
+            if switch_policy is not None and stage_start_s is not None:
+                assert blanking_until_s is not None
+                assert force_snapshot_at_s is not None
+                in_blanking = elapsed_sample_s < blanking_until_s
+                force_snapshot_due = (not stage_snapshot_seen) and (elapsed_sample_s >= force_snapshot_at_s)
+
+            if multi_mode:
+                if not in_blanking:
+                    for name, backbone in backbone_instances.items():
+                        snapshot = backbone.update((elapsed_sample_s, filtered, current_mA))
+                        if snapshot is not None:
+                            snapshots_by_backbone[name].append(snapshot)
+                            last_snapshots[name] = snapshot
+                    primary_snapshot = last_snapshots.get(primary_backbone_name)
+                else:
+                    primary_snapshot = None
+
+                if primary_snapshot is None and force_snapshot_due and not in_blanking:
+                    primary_snapshot = _forced_snapshot_from_buffer(elapsed_sample_s, current_mA, buffer)
+                    if primary_snapshot is not None:
+                        snapshots_by_backbone[primary_backbone_name].append(primary_snapshot)
+                        last_snapshots[primary_backbone_name] = primary_snapshot
+
+                if primary_snapshot is not None:
+                    stage_snapshot_seen = True
+                if primary_snapshot is not None and commander is not None and not in_blanking:
                     try:
-                        commander.decide_stage(primary_snapshot.voltage, primary_snapshot.current_mA)
+                        decision = commander.decide_stage(primary_snapshot.voltage, primary_snapshot.current_mA)
+                        if decision.switched and switch_policy is not None:
+                            stage_start_s = elapsed_sample_s
+                            blanking_until_s = stage_start_s + switch_policy.blanking_s
+                            force_snapshot_at_s = stage_start_s + switch_policy.max_settle_s
+                            stage_snapshot_seen = False
+                            buffer.clear()
+                            moving_average.reset()
+                            if low_pass is not None:
+                                low_pass.reset()
+                            for backbone in backbone_instances.values():
+                                backbone.reset()
+                            for name in last_snapshots:
+                                last_snapshots[name] = None
                     except Exception:
                         pass
 
@@ -168,16 +227,34 @@ def main() -> None:
                     stop_requested = True
                     break
             else:
-                snapshot = backbone_instances[primary_backbone_name].update((elapsed_sample_s, filtered, current_mA))
+                snapshot = None
+                if not in_blanking:
+                    snapshot = backbone_instances[primary_backbone_name].update((elapsed_sample_s, filtered, current_mA))
+
+                if snapshot is None and force_snapshot_due and not in_blanking:
+                    snapshot = _forced_snapshot_from_buffer(elapsed_sample_s, current_mA, buffer)
 
                 if snapshot is not None:
+                    stage_snapshot_seen = True
                     last_snapshot_value = snapshot.voltage
                     # if using serial hardware, let the commander decide stage based
                     # on the frozen snapshot value so hardware switching happens
                     # only when a stable snapshot is observed.
-                    if commander is not None:
+                    if commander is not None and not in_blanking:
                         try:
-                            commander.decide_stage(snapshot.voltage, snapshot.current_mA)
+                            decision = commander.decide_stage(snapshot.voltage, snapshot.current_mA)
+                            if decision.switched and switch_policy is not None:
+                                stage_start_s = elapsed_sample_s
+                                blanking_until_s = stage_start_s + switch_policy.blanking_s
+                                force_snapshot_at_s = stage_start_s + switch_policy.max_settle_s
+                                stage_snapshot_seen = False
+                                buffer.clear()
+                                moving_average.reset()
+                                if low_pass is not None:
+                                    low_pass.reset()
+                                for backbone in backbone_instances.values():
+                                    backbone.reset()
+                                last_snapshot_value = None
                         except Exception:
                             # do not crash acquisition if stage decision fails
                             pass

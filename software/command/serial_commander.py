@@ -84,10 +84,11 @@ class SerialCommander:
         next_stage = self._current_stage
 
         power_mw = voltage_v * current_mA
-        while power_mw > policy.power_limit_mw and next_stage > protocol.stage_command_min:
-            next_stage -= 1
-        if power_mw <= policy.power_limit_mw:
-            while voltage_v < self._raise_threshold_for_stage(next_stage) and next_stage < protocol.stage_command_max:
+        if power_mw > policy.power_limit_mw:
+            next_stage = self._downshift_for_power(voltage_v)
+        elif self._can_raise(voltage_v):
+            low_threshold, high_threshold = self._raise_band_for_stage(next_stage)
+            if voltage_v < low_threshold and next_stage < protocol.stage_command_max:
                 next_stage += 1
 
         switched = next_stage != self._current_stage
@@ -134,15 +135,25 @@ class SerialCommander:
         assert self._serial is not None
         self._serial.write(command.encode("utf-8"))
 
-    def _raise_threshold_for_stage(self, stage: int) -> float:
+    def _raise_band_for_stage(self, stage: int) -> Tuple[float, float]:
         policy = self._config.current_switch
-        thresholds = (
-            policy.stage0_raise_threshold_v,
-            policy.stage1_raise_threshold_v,
-            policy.stage2_raise_threshold_v,
-            policy.stage3_raise_threshold_v,
-        )
-        return thresholds[stage]
+        return policy.raise_low_v_by_stage[stage], policy.raise_high_v_by_stage[stage]
+
+    def _can_raise(self, voltage_v: float) -> bool:
+        policy = self._config.current_switch
+        return policy.min_voltage_v <= voltage_v <= policy.headroom_v
+
+    def _downshift_for_power(self, voltage_v: float) -> int:
+        policy = self._config.current_switch
+        protocol = self._config.protocol
+        next_stage = self._current_stage
+        while next_stage > protocol.stage_command_min:
+            candidate = next_stage - 1
+            candidate_current = policy.current_mA_by_stage[candidate]
+            if voltage_v * candidate_current <= policy.power_limit_mw:
+                return candidate
+            next_stage = candidate
+        return protocol.stage_command_min
 
     def _ensure_open(self) -> None:
         if not self.is_open:
