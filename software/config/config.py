@@ -37,6 +37,7 @@ class SimulationConfig:
 class StreamMarkersConfig:
     stream_start: str = "*STREAM_START"
     stream_stop: str = "*STREAM_STOP"
+    reset_done: str = "*Reset DONE!"
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,7 @@ class SerialProtocolConfig:
     stage_command_min: int = 0
     stage_command_max: int = 3
     stream_startup_delay_s: float = 2.0
+    stream_start_timeout_s: float = 5.0
     stream_restart_delay_s: float = 0.07
     line_timeout_s: float = 1.0
 

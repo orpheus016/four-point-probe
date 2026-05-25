@@ -50,7 +50,7 @@ def main():
         print("Synchronizing with stream header...")
         
         # Robust synchronization loop: loop until we find exactly stream_start
-        start_timeout = time.monotonic() + 5.0
+        start_timeout = time.monotonic() + protocol.stream_start_timeout_s
         while True:
             if time.monotonic() > start_timeout:
                 raise TimeoutError(f"Timed out waiting for synchronization marker: {markers.stream_start}")

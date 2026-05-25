@@ -121,8 +121,8 @@ class SerialCommander:
             if line == marker:
                 return
 
-            if line.startswith("*") and line != marker:
-                raise RuntimeError(f"unexpected stream marker: {line}")
+            if line.startswith("*"):
+                continue
 
     def flush_input(self) -> None:
         self._ensure_open()

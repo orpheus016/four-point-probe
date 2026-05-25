@@ -30,14 +30,13 @@ def ads1256_reader(
     commander.open()
     start_time_s = time.perf_counter()
     try:
-        # only perform reset/start sequence if we own the commander; if caller
-        # provided an already-configured commander assume they're managing lifecycle
-        if owner:
-            commander.reset()
-            time.sleep(config.protocol.stream_startup_delay_s)
-            commander.flush_input()
-            commander.start_stream()
-            commander.wait_for_marker(config.markers.stream_start)
+        # Match manual_capture: clear boot chatter, start the stream, and wait
+        # until the exact stream header arrives before yielding any samples.
+        commander.reset()
+        time.sleep(config.protocol.stream_startup_delay_s)
+        commander.flush_input()
+        commander.start_stream()
+        commander.wait_for_marker(config.markers.stream_start, timeout_s=config.protocol.stream_start_timeout_s)
 
         while True:
             line = commander.read_line()
@@ -46,6 +45,9 @@ def ads1256_reader(
 
             if line == config.markers.stream_stop:
                 return
+
+            if line == config.markers.reset_done:
+                continue
 
             if line.startswith("*"):
                 raise RuntimeError(f"unexpected stream marker: {line}")
