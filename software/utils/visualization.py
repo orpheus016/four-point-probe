@@ -8,9 +8,8 @@ from typing import Deque, Optional
 
 import matplotlib.pyplot as plt
 from matplotlib import animation as mpl_animation
+from matplotlib.ticker import ScalarFormatter
 import numpy as np
-import threading
-import queue
 import time
 
 
@@ -35,6 +34,13 @@ def get_backbone_style(index: int) -> dict[str, str]:
 
 def _render_evaluation_legend() -> None:
     plt.legend()
+
+
+def _apply_sci_notation(axis) -> None:
+    formatter = ScalarFormatter(useOffset=False, useMathText=False)
+    formatter.set_powerlimits((0, 0))
+    axis.yaxis.set_major_formatter(formatter)
+    axis.ticklabel_format(axis="y", style="sci", scilimits=(0, 0), useOffset=False)
 
 
 def _add_snapshot_annotation(axis, snapshot, label: str, color: str, index: int) -> None:
@@ -85,6 +91,7 @@ def _plot_evaluation_comparison(currents, voltages, results, name: str) -> None:
     plt.xlabel("Current (mA)")
     plt.ylabel("Voltage (V)")
     plt.title(f"IV comparison: {name}")
+    _apply_sci_notation(plt.gca())
     _render_evaluation_legend()
     plt.tight_layout()
 
@@ -96,6 +103,7 @@ def _plot_evaluation_transient(times, voltages, results, name: str, base_out: Pa
     plt.ylabel("Voltage (V)")
     plt.title(f"Transient evaluation: {name}")
     plt.grid(True, alpha=0.3)
+    _apply_sci_notation(plt.gca())
 
     snapshot_marks = []
     for index, (bname, info) in enumerate(results.items()):
@@ -187,6 +195,38 @@ def render_evaluation_results(base_out: Path, name: str, data: dict, show: bool 
     plt.close()
 
 
+def save_final_comparison_image(output_path: Path, window_seconds: float, snapshot_v: Optional[float], true_v: Optional[float] = None) -> bool:
+    if snapshot_v is None:
+        return False
+
+    x_min = 0.0
+    x_max = max(window_seconds, 1.0)
+    fig, ax = plt.subplots()
+    ax.set_title("Final Comparison")
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Voltage (V)")
+    ax.grid(True, alpha=0.3)
+    _apply_sci_notation(ax)
+
+    if true_v is not None:
+        ax.plot([x_min, x_max], [true_v, true_v], linestyle="--", label="true")
+        v_min = min(true_v, snapshot_v)
+        v_max = max(true_v, snapshot_v)
+    else:
+        v_min = snapshot_v
+        v_max = snapshot_v
+    ax.plot([x_min, x_max], [snapshot_v, snapshot_v], linestyle=":", label="snapshot")
+
+    margin = (v_max - v_min) * 0.1 if v_max != v_min else 1e-6
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(v_min - margin, v_max + margin)
+    ax.legend(loc="upper right")
+    fig.tight_layout()
+    plt.savefig(output_path)
+    plt.close(fig)
+    return True
+
+
 class LivePlot:
     """Realtime rolling plot for voltage vs time."""
 
@@ -210,6 +250,7 @@ class LivePlot:
         self._ax.set_xlabel("Time (s)")
         self._ax.set_ylabel("Voltage (V)")
         self._ax.grid(True, alpha=0.3)
+        _apply_sci_notation(self._ax)
         self._ax.legend(loc="upper right")
         self._fig.tight_layout()
         plt.show(block=False)
@@ -312,34 +353,16 @@ class LivePlot:
 
 
 class AsyncVisualizer:
-    """Background visualizer that accepts updates via a queue and renders them
-    on a worker thread to avoid blocking the acquisition loop.
+    """Thin wrapper that keeps Matplotlib updates on the main thread.
 
-    Note: Matplotlib is not fully thread-safe across all backends; this class
-    keeps painting simple and uses short timeouts to reduce contention.
+    The acquisition loop already throttles updates, so the safest way to keep
+    the GUI visible is to call Matplotlib from the same thread that runs main.
     """
 
-    def __init__(self, window_seconds: float, max_samples: int, plot_mode: str = "comparison") -> None:
+    def __init__(self, window_seconds: float, max_samples: int, plot_mode: str = "comparison", update_hz: float = 0.0) -> None:
         self._live = LivePlot(window_seconds, max_samples, plot_mode=plot_mode)
-        self._q: "queue.Queue[tuple]" = queue.Queue()
-        self._thread = threading.Thread(target=self._worker, daemon=True)
-        self._running = True
-        self._thread.start()
-
-    def _worker(self) -> None:
-        while self._running:
-            try:
-                item = self._q.get(timeout=0.2)
-            except queue.Empty:
-                # allow periodic UI refresh
-                continue
-            if item is None:
-                break
-            try:
-                self._live.update(*item)
-            except Exception:
-                # swallow plotting errors so the acquisition loop isn't affected
-                pass
+        self._min_update_s = 0.0 if update_hz <= 0 else 1.0 / update_hz
+        self._next_update_s = 0.0
 
     def submit_update(
         self,
@@ -351,32 +374,102 @@ class AsyncVisualizer:
         rms: Optional[float],
         is_stable: bool,
     ) -> None:
-        # non-blocking put; if queue is full this will block briefly
-        try:
-            self._q.put_nowait((t_s, measured_v, true_v, snapshot_v, mean, rms, is_stable))
-        except queue.Full:
-            # fall back to blocking put to ensure eventual delivery
-            self._q.put((t_s, measured_v, true_v, snapshot_v, mean, rms, is_stable))
+        if self._min_update_s > 0.0:
+            now = time.perf_counter()
+            if now < self._next_update_s:
+                return
+            self._next_update_s = now + self._min_update_s
+        self._live.update(t_s, measured_v, true_v, snapshot_v, mean, rms, is_stable)
 
     def show_final_comparison(self, true_v: Optional[float], snapshot_v: Optional[float]) -> None:
-        # stop worker to allow final blocking display
-        self._running = False
-        # flush queue then call final render on main thread
-        try:
-            while True:
-                item = self._q.get_nowait()
-                if item is None:
-                    break
-        except queue.Empty:
-            pass
         self._live.show_final_comparison(true_v, snapshot_v)
 
     def close(self) -> None:
-        # signal worker to exit
-        self._running = False
-        try:
-            self._q.put_nowait(None)
-        except Exception:
-            pass
-        self._thread.join(timeout=1.0)
+        self._live.close()
+
+
+class LiveTransientComparison:
+    """Realtime transient plot with snapshot markers for multiple backbones."""
+
+    def __init__(self, window_seconds: float, max_samples: int, backbone_names: list[str]) -> None:
+        self._window_seconds = window_seconds
+        self._times: Deque[float] = deque(maxlen=max_samples)
+        self._voltages: Deque[float] = deque(maxlen=max_samples)
+        self._snapshots: dict[str, list] = {name: [] for name in backbone_names}
+        self._snapshot_artists = {}
+        self._decided_artists = {}
+
+        plt.ion()
+        self._fig, self._ax = plt.subplots()
+        (self._measured_line,) = self._ax.plot([], [], label="measured", lw=1.5, color="#444444")
+        for index, name in enumerate(backbone_names):
+            style = get_backbone_style(index)
+            snapshot_artist = self._ax.scatter([], [], label=f"{name} snapshots", s=28, color=style["color"])
+            decided_artist = self._ax.scatter([], [], marker="*", s=180, color=style["color"], edgecolors="black", linewidths=0.6, label=f"{name} decided snapshot", zorder=5)
+            self._snapshot_artists[name] = snapshot_artist
+            self._decided_artists[name] = decided_artist
+
+        self._ax.set_title("Transient comparison")
+        self._ax.set_xlabel("Time (s)")
+        self._ax.set_ylabel("Voltage (V)")
+        self._ax.grid(True, alpha=0.3)
+        _apply_sci_notation(self._ax)
+        self._ax.legend(loc="upper right")
+        self._fig.tight_layout()
+        plt.show(block=False)
+
+    def submit_update(self, t_s: float, measured_v: float, snapshots_by_backbone: dict[str, list]) -> None:
+        self._times.append(t_s)
+        self._voltages.append(measured_v)
+        self._measured_line.set_data(self._times, self._voltages)
+
+        for name, snapshots in snapshots_by_backbone.items():
+            self._snapshots[name] = snapshots
+            points = [(snap.timestamp, snap.voltage) for snap in snapshots]
+            artist = self._snapshot_artists[name]
+            decided_artist = self._decided_artists[name]
+            if points:
+                artist.set_offsets(np.asarray(points, dtype=float))
+                last = points[-1]
+                decided_artist.set_offsets(np.asarray([last], dtype=float))
+            else:
+                artist.set_offsets(np.empty((0, 2), dtype=float))
+                decided_artist.set_offsets(np.empty((0, 2), dtype=float))
+
+        x_min = max(0.0, t_s - self._window_seconds)
+        x_max = max(self._window_seconds, t_s)
+        self._ax.set_xlim(x_min, x_max)
+
+        if self._voltages:
+            v_min = min(self._voltages)
+            v_max = max(self._voltages)
+            margin = (v_max - v_min) * 0.1 if v_max != v_min else 1e-6
+            self._ax.set_ylim(v_min - margin, v_max + margin)
+
+        self._fig.canvas.draw_idle()
+        self._fig.canvas.flush_events()
+        plt.pause(0.001)
+
+    def close(self) -> None:
+        plt.ioff()
+        plt.close(self._fig)
+
+
+class LiveTransientVisualizer:
+    """Throttle updates for live multi-backbone transient plotting."""
+
+    def __init__(self, window_seconds: float, max_samples: int, backbone_names: list[str], update_hz: float = 0.0) -> None:
+        self._live = LiveTransientComparison(window_seconds, max_samples, backbone_names)
+        self._min_update_s = 0.0 if update_hz <= 0 else 1.0 / update_hz
+        self._next_update_s = 0.0
+
+    def submit_update(self, t_s: float, measured_v: float, snapshots_by_backbone: dict[str, list]) -> None:
+        if self._min_update_s > 0.0:
+            now = time.perf_counter()
+            if now < self._next_update_s:
+                return
+            self._next_update_s = now + self._min_update_s
+        self._live.submit_update(t_s, measured_v, snapshots_by_backbone)
+
+    def close(self) -> None:
         self._live.close()

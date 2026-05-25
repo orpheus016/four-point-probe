@@ -38,3 +38,31 @@ def csv_replay_reader(csv_path: str, sample_rate_hz: float = SimulationConfig.sa
                 current_mA = float(row[1])
                 timestamp_s = index / sample_rate_hz
                 yield (timestamp_s, voltage_v, current_mA)
+
+
+def csv_logged_reader(csv_path: str) -> Iterator[Sample]:
+    """Yield (elapsed_s, measured_v, current_mA) tuples from a logger CSV.
+
+    The expected input columns are `elapsed_s,measured_v,current_mA`.
+    """
+    path = Path(csv_path)
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        if reader.fieldnames is None:
+            raise ValueError("logger CSV is missing a header row")
+
+        required = {"elapsed_s", "measured_v", "current_mA"}
+        if not required.issubset(reader.fieldnames):
+            missing = sorted(required - set(reader.fieldnames))
+            raise ValueError(f"logger CSV missing columns: {', '.join(missing)}")
+
+        for row in reader:
+            if not row:
+                continue
+            try:
+                elapsed_s = float(row.get("elapsed_s", ""))
+                measured_v = float(row.get("measured_v", ""))
+                current_mA = float(row.get("current_mA", ""))
+            except (TypeError, ValueError):
+                continue
+            yield (elapsed_s, measured_v, current_mA)

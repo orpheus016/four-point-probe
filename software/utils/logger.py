@@ -13,6 +13,12 @@ from .types import Snapshot
 class CsvLogger:
     """Append timestamped voltage samples to a CSV file."""
 
+    @staticmethod
+    def build_run_paths(output_root: str, run_name: str) -> tuple[str, str]:
+        run_dir = os.path.join(output_root, run_name)
+        csv_name = f"{run_name}.csv"
+        return run_dir, csv_name
+
     def __init__(self, output_dir: str, filename: Optional[str] = None) -> None:
         os.makedirs(output_dir, exist_ok=True)
         if filename is None:

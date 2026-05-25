@@ -101,6 +101,12 @@ class CLIConfig:
     snapshot_min_duration_s: float = SimulationConfig.snapshot_min_duration_s
     snapshot_mode: str = "first"
     plot_mode: str = "comparison"
+    live_plot: bool = False
+    plot_update_hz: float = 15.0
+    plot_backend: str = ""
+    save_plot_on_interrupt: bool = False
+    live_backbones: str = ""
+    live_duration_s: float = 0.0
     evaluation_plot_mode: str = "comparison"
     evaluation_animate: bool = False
     evaluation_animation_output: str = "screen"
@@ -160,6 +166,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hysteresis-exit", type=float, default=0.8, help="exit threshold (V) for hysteresis backbone")
     parser.add_argument("--snapshot-mode", choices=["first", "continuous"], default=defaults.snapshot_mode)
     parser.add_argument("--plot-mode", choices=["comparison", "full"], default=defaults.plot_mode)
+    parser.add_argument("--live-plot", action=argparse.BooleanOptionalAction, default=defaults.live_plot)
+    parser.add_argument("--plot-update-hz", type=float, default=defaults.plot_update_hz)
+    parser.add_argument("--plot-backend", type=str, default=defaults.plot_backend)
+    parser.add_argument("--save-plot-on-interrupt", action=argparse.BooleanOptionalAction, default=defaults.save_plot_on_interrupt)
+    parser.add_argument("--live-backbones", type=str, default=defaults.live_backbones, help="comma-separated backbone names for live comparison")
+    parser.add_argument("--live-duration", type=float, default=defaults.live_duration_s, help="duration (s) for live multi-backbone capture; 0 uses --max-measurement")
     parser.add_argument("--evaluation-plot-mode", choices=["comparison", "transient"], default=defaults.evaluation_plot_mode)
     parser.add_argument("--evaluation-animate", action=argparse.BooleanOptionalAction, default=defaults.evaluation_animate)
     parser.add_argument("--evaluation-animation-output", choices=["screen", "gif", "video"], default=defaults.evaluation_animation_output)

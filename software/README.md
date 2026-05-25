@@ -69,9 +69,29 @@ capture a frozen snapshot of the measurement.
 ## Run from repo root
 Examples showing common runs. Use `--help` for full CLI options.
 
+### Live plotting with `main`
+
+`software.main` can show a live plot while acquisition is running. The key flags are:
+
+- `--plot-mode full` shows the rolling live trace, current buffer, and snapshot line while samples stream in.
+- `--plot-mode comparison` keeps the final comparison-style view.
+- `--live-plot` enables the GUI plotter (omit or `--no-live-plot` to disable).
+- `--plot-update-hz` throttles how often the plot updates (lower values reduce GUI overhead).
+- `--save-plot-on-interrupt` saves the final comparison image on `Ctrl+C` when a snapshot exists.
+- `--plot-backend` is optional (use only if you need to force a backend like `TkAgg` or `QtAgg`).
+- `--live-backbones` runs multiple backbones on the same stream and shows a live transient comparison.
+- `--live-duration` sets how long live multi-backbone capture runs (defaults to `--max-measurement`).
+
+The plot opens in the same process as `main`, so keep the terminal running until you stop the stream or the snapshot completes.
+
 1. One-shot measurement using the default `running_stat` strategy:
    python -m software.main --source dummy --backbone running_stat --current 0.01 --resistance 1.5 \
       --snapshot-threshold 0.0004 --snapshot-window 2.0 --snapshot-min-duration 2.0
+
+   Live plotting version of the same run:
+   python -m software.main --source dummy --backbone running_stat \
+      --current 0.01 --resistance 1.5 --snapshot-threshold 0.0004 \
+      --snapshot-window 2.0 --snapshot-min-duration 2.0 --plot-mode full --live-plot
 
 2. Hysteresis-based snapshot with explicit enter/exit thresholds:
    python -m software.main --source dummy --backbone hysteresis \
@@ -80,6 +100,10 @@ Examples showing common runs. Use `--help` for full CLI options.
 3. Replay a CSV testbench dataset and log outputs to `software/output/testbench`:
    python -m software.main --source csv --csv-path software/output/testbench/stable20mA.csv \
       --backbone running_stat --stop-on-snapshot
+
+   Live plotting while replaying the CSV:
+   python -m software.main --source csv --csv-path software/output/testbench/stable20mALONG.csv \
+      --backbone baseline --plot-mode full --stop-on-snapshot --live-plot
 
    Single backbone on a single dataset:
    python -m software.scripts.evaluate --input software/output/testbench/stable20mA.csv \
@@ -90,13 +114,30 @@ Examples showing common runs. Use `--help` for full CLI options.
       --backbones running_stat,stddev_window,baseline,hysteresis --out software/output/evaluate/batch
 
 4. Use the hardware ADS1256 input (COM port configured via `--port`):
-   python -m software.main --source serial --port COM5 --baud 115200 --backbone baseline
+   python -m software.main --source serial --port COM5 --baud 115200 --backbone baseline \
+      --plot-mode full --live-plot --plot-update-hz 15
+
+   If you want the stream to keep running after the first stable snapshot, disable auto-stop:
+   python -m software.main --source serial --port COM5 --baud 115200 --backbone baseline \
+      --plot-mode full --live-plot --no-stop-on-snapshot
+
+   Save a final comparison image even on manual interrupt:
+   python -m software.main --source serial --port COM5 --baud 115200 --backbone baseline \
+      --plot-mode full --live-plot --save-plot-on-interrupt
+
+   Live multi-backbone comparison for a fixed duration:
+   python -m software.main --source serial --port COM5 --baud 115200 \
+      --live-backbones baseline,stddev_window,hysteresis,running_stat --live-duration 20 \
+      --plot-mode full --live-plot
 
 Notes:
 - Snapshot detection strategies live in `software/backbones/` and implement `update(sample) -> Optional[Snapshot]`.
 - `running_stat.py` is the import-safe running-stat backbone implementation; the legacy hyphenated helper file was removed so CI only sees valid modules.
 - Runtime parameters and CLI defaults are centralized in `software/config/config.py`.
-- Outputs are routed into `software/output/<source>` to keep hardware and testbench logs separate.
+- Outputs are routed into `software/output/<source>/<run_name>/` to keep hardware and testbench logs separate.
+- For live acquisition, `--plot-mode full` is the most useful setting because it shows the running trace instead of only the end-state comparison.
+- When a snapshot exists and the run ends, the final comparison image is saved next to the CSV as `*_final.png`.
+- Serial runs also save a combined transient plot next to the CSV as `<csv_stem>_transient.png`.
 - The preferred developer workflow lives in [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts README](scripts/README.md).
 
 ## Snapshot function: where it is and how it works
