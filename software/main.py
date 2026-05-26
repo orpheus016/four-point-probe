@@ -145,6 +145,8 @@ def main() -> None:
     blanking_until_s: Optional[float] = None
     force_snapshot_at_s: Optional[float] = None
     stage_snapshot_seen = False
+    stop_holdoff_until_s: Optional[float] = None
+    stop_post_switch_snapshot_seen = True
     duration_s = None
     if multi_mode:
         duration_s = args.live_duration if args.live_duration > 0.0 else sim_config.max_measurement_s
@@ -160,6 +162,8 @@ def main() -> None:
             elapsed_s = time.perf_counter() - start
             sample: Sample = next(source_iter)
             elapsed_sample_s, raw_voltage, current_mA = sample
+            stage_changed = False
+            stage_to_log = commander.current_stage() if commander is not None else None
             filtered = moving_average.update(raw_voltage)
             if low_pass is not None:
                 filtered = low_pass.update(filtered)
@@ -203,10 +207,14 @@ def main() -> None:
                     try:
                         decision = commander.decide_stage(primary_snapshot.voltage, primary_snapshot.current_mA)
                         if decision.switched and switch_policy is not None:
+                            stage_changed = True
+                            stage_to_log = decision.stage
                             stage_start_s = elapsed_sample_s
                             blanking_until_s = stage_start_s + switch_policy.blanking_s
                             force_snapshot_at_s = stage_start_s + switch_policy.max_settle_s
                             stage_snapshot_seen = False
+                            stop_holdoff_until_s = stage_start_s + args.stop_holdoff_s
+                            stop_post_switch_snapshot_seen = False
                             buffer.clear()
                             moving_average.reset()
                             if low_pass is not None:
@@ -221,7 +229,7 @@ def main() -> None:
                 is_stable = primary_snapshot is not None
                 if plotter is not None:
                     plotter.submit_update(elapsed_s, filtered, snapshots_by_backbone)
-                logger.log_sample(datetime.now(), elapsed_s, filtered, current_mA, primary_snapshot)
+                logger.log_sample(datetime.now(), elapsed_s, filtered, current_mA, primary_snapshot, stage=stage_to_log, stage_changed=stage_changed)
 
                 if duration_s is not None and elapsed_s >= duration_s:
                     stop_requested = True
@@ -244,10 +252,14 @@ def main() -> None:
                         try:
                             decision = commander.decide_stage(snapshot.voltage, snapshot.current_mA)
                             if decision.switched and switch_policy is not None:
+                                stage_changed = True
+                                stage_to_log = decision.stage
                                 stage_start_s = elapsed_sample_s
                                 blanking_until_s = stage_start_s + switch_policy.blanking_s
                                 force_snapshot_at_s = stage_start_s + switch_policy.max_settle_s
                                 stage_snapshot_seen = False
+                                stop_holdoff_until_s = stage_start_s + args.stop_holdoff_s
+                                stop_post_switch_snapshot_seen = False
                                 buffer.clear()
                                 moving_average.reset()
                                 if low_pass is not None:
@@ -259,13 +271,21 @@ def main() -> None:
                             # do not crash acquisition if stage decision fails
                             pass
 
+                if snapshot is not None and stop_holdoff_until_s is not None and not stage_changed:
+                    if elapsed_sample_s >= stop_holdoff_until_s:
+                        stop_post_switch_snapshot_seen = True
+
                 is_stable = snapshot is not None
 
                 if plotter is not None:
                     plotter.submit_update(elapsed_s, filtered, None, last_snapshot_value, mean, rms, is_stable)
-                logger.log_sample(datetime.now(), elapsed_s, filtered, current_mA, snapshot)
+                logger.log_sample(datetime.now(), elapsed_s, filtered, current_mA, snapshot, stage=stage_to_log, stage_changed=stage_changed)
 
-                if snapshot is not None and args.stop_on_snapshot:
+                can_stop = True
+                if args.stop_require_post_switch and stop_holdoff_until_s is not None:
+                    can_stop = stop_post_switch_snapshot_seen and elapsed_sample_s >= stop_holdoff_until_s
+
+                if snapshot is not None and args.stop_on_snapshot and can_stop and not stage_changed:
                     stop_requested = True
                     break
 

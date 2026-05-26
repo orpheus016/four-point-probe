@@ -27,7 +27,16 @@ class CsvLogger:
         self._path = os.path.join(output_dir, filename)
         self._file = open(self._path, "w", newline="", encoding="utf-8")
         self._writer = csv.writer(self._file)
-        self._writer.writerow(["timestamp", "elapsed_s", "measured_v", "current_mA", "resistance", "std_dev", "stage"])
+        self._writer.writerow([
+            "timestamp",
+            "elapsed_s",
+            "measured_v",
+            "current_mA",
+            "resistance",
+            "std_dev",
+            "stage",
+            "stage_changed",
+        ])
         self._line_count = 0
 
     @property
@@ -41,7 +50,10 @@ class CsvLogger:
         measured_v: float,
         current_mA: float,
         snapshot: Optional[Snapshot] = None,
+        stage: Optional[int] = None,
+        stage_changed: Optional[bool] = None,
     ) -> None:
+        stage_value = stage if stage is not None else (snapshot.stage if snapshot is not None else None)
         self._writer.writerow(
             [
                 timestamp.isoformat(timespec="milliseconds"),
@@ -50,7 +62,8 @@ class CsvLogger:
                 f"{current_mA:.8f}",
                 "" if snapshot is None or snapshot.resistance is None else f"{snapshot.resistance:.8f}",
                 "" if snapshot is None or snapshot.std_dev is None else f"{snapshot.std_dev:.8f}",
-                "" if snapshot is None or snapshot.stage is None else snapshot.stage,
+                "" if stage_value is None else stage_value,
+                "" if stage_changed is None else str(stage_changed).lower(),
             ]
         )
         self._line_count += 1

@@ -112,6 +112,8 @@ class CLIConfig:
     evaluation_animation_output: str = "screen"
     evaluation_animation_fps: int = 12
     stop_on_snapshot: bool = True
+    stop_holdoff_s: float = CurrentSwitchConfig.blanking_s
+    stop_require_post_switch: bool = True
     output_dir: str = "software/output"
     port: str = "COM12"
     baud: int = 115200
@@ -192,6 +194,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--evaluation-animation-output", choices=["screen", "gif", "video"], default=defaults.evaluation_animation_output)
     parser.add_argument("--evaluation-animation-fps", type=int, default=defaults.evaluation_animation_fps)
     parser.add_argument("--stop-on-snapshot", action=argparse.BooleanOptionalAction, default=defaults.stop_on_snapshot)
+    parser.add_argument("--stop-holdoff", type=float, default=defaults.stop_holdoff_s, help="minimum seconds after stage switch before stop-on-snapshot")
+    parser.add_argument("--stop-require-post-switch", action=argparse.BooleanOptionalAction, default=defaults.stop_require_post_switch, help="require a post-switch snapshot before stop-on-snapshot")
     parser.add_argument("--output-dir", type=str, default=defaults.output_dir)
     parser.add_argument("--port", type=str, default=defaults.port)
     parser.add_argument("--baud", type=int, default=defaults.baud)

@@ -140,6 +140,7 @@ Notes:
 - Serial runs also save a combined transient plot next to the CSV as `<csv_stem>_transient.png`.
 - Serial current switching is snapshot-driven: switching only evaluates on stable snapshots (or a forced snapshot after `--switch-max-settle`). A blanking window (`--switch-blanking`) resets filters and backbones after a stage change before stability checks resume.
 - Voltage-based raise thresholds use per-stage hysteresis bands (`--switch-raise-low` and `--switch-raise-high`), while power-limit downshifts apply at all stages (`--switch-power-limit-mw`).
+- Stop-on-snapshot can be gated after a stage switch using `--stop-holdoff` (seconds) and `--stop-require-post-switch` to avoid stopping on the same snapshot that triggers a switch.
 - The preferred developer workflow lives in [CONTRIBUTING.md](../CONTRIBUTING.md) and [scripts README](scripts/README.md).
 
 ## Snapshot function: where it is and how it works
