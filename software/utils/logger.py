@@ -34,7 +34,8 @@ class CsvLogger:
             "current_mA",
             "resistance",
             "std_dev",
-            "stage",
+            "stage_commanded",
+            "stage_effective",
             "stage_changed",
         ])
         self._line_count = 0
@@ -50,10 +51,11 @@ class CsvLogger:
         measured_v: float,
         current_mA: float,
         snapshot: Optional[Snapshot] = None,
-        stage: Optional[int] = None,
+        stage_commanded: Optional[int] = None,
+        stage_effective: Optional[int] = None,
         stage_changed: Optional[bool] = None,
     ) -> None:
-        stage_value = stage if stage is not None else (snapshot.stage if snapshot is not None else None)
+        commanded_value = stage_commanded if stage_commanded is not None else (snapshot.stage if snapshot is not None else None)
         self._writer.writerow(
             [
                 timestamp.isoformat(timespec="milliseconds"),
@@ -62,7 +64,8 @@ class CsvLogger:
                 f"{current_mA:.8f}",
                 "" if snapshot is None or snapshot.resistance is None else f"{snapshot.resistance:.8f}",
                 "" if snapshot is None or snapshot.std_dev is None else f"{snapshot.std_dev:.8f}",
-                "" if stage_value is None else stage_value,
+                "" if commanded_value is None else commanded_value,
+                "" if stage_effective is None else stage_effective,
                 "" if stage_changed is None else str(stage_changed).lower(),
             ]
         )

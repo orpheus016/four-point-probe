@@ -64,6 +64,7 @@ class CurrentSwitchConfig:
     raise_high_v_by_stage: Tuple[float, float, float, float] = (0.35, 0.3, 0.2, 0.0)
     blanking_s: float = 0.5
     max_settle_s: float = 1.0
+    stage_match_tolerance_mA: float = 0.1
 
 
 @dataclass(frozen=True)
@@ -114,6 +115,7 @@ class CLIConfig:
     stop_on_snapshot: bool = True
     stop_holdoff_s: float = CurrentSwitchConfig.blanking_s
     stop_require_post_switch: bool = True
+    stop_final_holdoff_s: float = CurrentSwitchConfig.max_settle_s
     output_dir: str = "software/output"
     port: str = "COM12"
     baud: int = 115200
@@ -125,6 +127,7 @@ class CLIConfig:
     switch_headroom_v: float = CurrentSwitchConfig.headroom_v
     switch_blanking_s: float = CurrentSwitchConfig.blanking_s
     switch_max_settle_s: float = CurrentSwitchConfig.max_settle_s
+    switch_stage_match_tol_mA: float = CurrentSwitchConfig.stage_match_tolerance_mA
     # Evaluate script specific defaults
     input: str = "software/output/testbench"
     out: str = "software/output/evaluate"
@@ -196,6 +199,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--stop-on-snapshot", action=argparse.BooleanOptionalAction, default=defaults.stop_on_snapshot)
     parser.add_argument("--stop-holdoff", type=float, default=defaults.stop_holdoff_s, help="minimum seconds after stage switch before stop-on-snapshot")
     parser.add_argument("--stop-require-post-switch", action=argparse.BooleanOptionalAction, default=defaults.stop_require_post_switch, help="require a post-switch snapshot before stop-on-snapshot")
+    parser.add_argument("--stop-final-holdoff", type=float, default=defaults.stop_final_holdoff_s, help="extra holdoff (s) before stopping on the final stage")
     parser.add_argument("--output-dir", type=str, default=defaults.output_dir)
     parser.add_argument("--port", type=str, default=defaults.port)
     parser.add_argument("--baud", type=int, default=defaults.baud)
@@ -207,6 +211,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--switch-headroom", type=float, default=defaults.switch_headroom_v)
     parser.add_argument("--switch-blanking", type=float, default=defaults.switch_blanking_s)
     parser.add_argument("--switch-max-settle", type=float, default=defaults.switch_max_settle_s)
+    parser.add_argument("--switch-stage-match-tol", type=float, default=defaults.switch_stage_match_tol_mA, help="tolerance (mA) for mapping current to stage")
     # Evaluate script specific args
     parser.add_argument("--input", type=str, default=defaults.input, help="file or directory to read CSVs from")
     parser.add_argument("--out", type=str, default=defaults.out, help="output directory for plots and summaries")
@@ -257,5 +262,6 @@ def build_serial_config(args: argparse.Namespace) -> SerialConfig:
         raise_high_v_by_stage=raise_high,
         blanking_s=args.switch_blanking,
         max_settle_s=args.switch_max_settle,
+        stage_match_tolerance_mA=args.switch_stage_match_tol,
     )
     return SerialConfig(port=args.port, baud_rate=args.baud, current_switch=current_switch)

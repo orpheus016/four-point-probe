@@ -7,7 +7,7 @@ from collections import deque
 from datetime import datetime
 from typing import Deque, Optional
 
-from .config.config import build_arg_parser, build_serial_config, build_simulation_config
+from .config.config import build_arg_parser, build_serial_config, build_simulation_config, CurrentSwitchConfig
 from .data_source.ads1256 import ads1256_reader
 from .command.serial_commander import SerialCommander
 from .utils.csv_replay import csv_logged_reader, csv_replay_reader
@@ -55,6 +55,14 @@ def _forced_snapshot_from_buffer(elapsed_s: float, current_mA: float, buffer: De
         resistance=resistance,
         std_dev=std_dev,
     )
+
+
+def _infer_stage_from_current(current_mA: float, policy: CurrentSwitchConfig) -> Optional[int]:
+    tolerance = policy.stage_match_tolerance_mA
+    for index, target_mA in enumerate(policy.current_mA_by_stage):
+        if abs(current_mA - target_mA) <= tolerance:
+            return index
+    return None
 
 
 def build_source_iterator(args, sim_config):
@@ -120,12 +128,14 @@ def main() -> None:
 
     commander: SerialCommander | None = None
     switch_policy = None
+    max_stage = None
     # for serial source, create a commander and pass it into the reader so main
     # can signal stage changes when a Snapshot is emitted
     if args.source == "serial":
         serial_config = build_serial_config(args)
         switch_policy = serial_config.current_switch
         commander = SerialCommander(serial_config)
+        max_stage = serial_config.protocol.stage_command_max
         # do not start the stream here; ads1256_reader will open the port and
         # perform startup sequence when owner=True. We pass the commander so
         # we can call `decide_stage` on snapshot events and also close it later.
@@ -147,9 +157,13 @@ def main() -> None:
     stage_snapshot_seen = False
     stop_holdoff_until_s: Optional[float] = None
     stop_post_switch_snapshot_seen = True
+    stop_final_holdoff_until_s: Optional[float] = None
+    serial_duration_s: Optional[float] = None
     duration_s = None
     if multi_mode:
         duration_s = args.live_duration if args.live_duration > 0.0 else sim_config.max_measurement_s
+    if args.source == "serial" and not args.stop_on_snapshot:
+        serial_duration_s = sim_config.max_measurement_s
 
     try:
         while True:
@@ -163,7 +177,8 @@ def main() -> None:
             sample: Sample = next(source_iter)
             elapsed_sample_s, raw_voltage, current_mA = sample
             stage_changed = False
-            stage_to_log = commander.current_stage() if commander is not None else None
+            stage_commanded = commander.current_stage() if commander is not None else None
+            stage_effective = _infer_stage_from_current(current_mA, switch_policy) if switch_policy is not None else None
             filtered = moving_average.update(raw_voltage)
             if low_pass is not None:
                 filtered = low_pass.update(filtered)
@@ -208,13 +223,16 @@ def main() -> None:
                         decision = commander.decide_stage(primary_snapshot.voltage, primary_snapshot.current_mA)
                         if decision.switched and switch_policy is not None:
                             stage_changed = True
-                            stage_to_log = decision.stage
+                            stage_commanded = decision.stage
                             stage_start_s = elapsed_sample_s
                             blanking_until_s = stage_start_s + switch_policy.blanking_s
                             force_snapshot_at_s = stage_start_s + switch_policy.max_settle_s
                             stage_snapshot_seen = False
                             stop_holdoff_until_s = stage_start_s + args.stop_holdoff_s
                             stop_post_switch_snapshot_seen = False
+                            stop_final_holdoff_until_s = None
+                            if max_stage is not None and decision.stage >= max_stage:
+                                stop_final_holdoff_until_s = stage_start_s + args.stop_final_holdoff_s
                             buffer.clear()
                             moving_average.reset()
                             if low_pass is not None:
@@ -229,7 +247,16 @@ def main() -> None:
                 is_stable = primary_snapshot is not None
                 if plotter is not None:
                     plotter.submit_update(elapsed_s, filtered, snapshots_by_backbone)
-                logger.log_sample(datetime.now(), elapsed_s, filtered, current_mA, primary_snapshot, stage=stage_to_log, stage_changed=stage_changed)
+                logger.log_sample(
+                    datetime.now(),
+                    elapsed_s,
+                    filtered,
+                    current_mA,
+                    primary_snapshot,
+                    stage_commanded=stage_commanded,
+                    stage_effective=stage_effective,
+                    stage_changed=stage_changed,
+                )
 
                 if duration_s is not None and elapsed_s >= duration_s:
                     stop_requested = True
@@ -253,13 +280,16 @@ def main() -> None:
                             decision = commander.decide_stage(snapshot.voltage, snapshot.current_mA)
                             if decision.switched and switch_policy is not None:
                                 stage_changed = True
-                                stage_to_log = decision.stage
+                                stage_commanded = decision.stage
                                 stage_start_s = elapsed_sample_s
                                 blanking_until_s = stage_start_s + switch_policy.blanking_s
                                 force_snapshot_at_s = stage_start_s + switch_policy.max_settle_s
                                 stage_snapshot_seen = False
                                 stop_holdoff_until_s = stage_start_s + args.stop_holdoff_s
                                 stop_post_switch_snapshot_seen = False
+                                stop_final_holdoff_until_s = None
+                                if max_stage is not None and decision.stage >= max_stage:
+                                    stop_final_holdoff_until_s = stage_start_s + args.stop_final_holdoff_s
                                 buffer.clear()
                                 moving_average.reset()
                                 if low_pass is not None:
@@ -279,13 +309,28 @@ def main() -> None:
 
                 if plotter is not None:
                     plotter.submit_update(elapsed_s, filtered, None, last_snapshot_value, mean, rms, is_stable)
-                logger.log_sample(datetime.now(), elapsed_s, filtered, current_mA, snapshot, stage=stage_to_log, stage_changed=stage_changed)
+                logger.log_sample(
+                    datetime.now(),
+                    elapsed_s,
+                    filtered,
+                    current_mA,
+                    snapshot,
+                    stage_commanded=stage_commanded,
+                    stage_effective=stage_effective,
+                    stage_changed=stage_changed,
+                )
 
                 can_stop = True
                 if args.stop_require_post_switch and stop_holdoff_until_s is not None:
                     can_stop = stop_post_switch_snapshot_seen and elapsed_sample_s >= stop_holdoff_until_s
+                if stop_final_holdoff_until_s is not None:
+                    can_stop = can_stop and elapsed_sample_s >= stop_final_holdoff_until_s
 
                 if snapshot is not None and args.stop_on_snapshot and can_stop and not stage_changed:
+                    stop_requested = True
+                    break
+
+                if serial_duration_s is not None and elapsed_sample_s >= serial_duration_s:
                     stop_requested = True
                     break
 

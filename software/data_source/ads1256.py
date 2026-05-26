@@ -28,7 +28,6 @@ def ads1256_reader(
 
     # ensure the serial port is open
     commander.open()
-    start_time_s = time.perf_counter()
     try:
         # Match manual_capture: clear boot chatter, start the stream, and wait
         # until the exact stream header arrives before yielding any samples.
@@ -37,6 +36,7 @@ def ads1256_reader(
         commander.flush_input()
         commander.start_stream()
         commander.wait_for_marker(config.markers.stream_start, timeout_s=config.protocol.stream_start_timeout_s)
+        start_time_s = time.perf_counter()
 
         while True:
             line = commander.read_line()
