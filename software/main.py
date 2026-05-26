@@ -162,7 +162,7 @@ def main() -> None:
     duration_s = None
     if multi_mode:
         duration_s = args.live_duration if args.live_duration > 0.0 else sim_config.max_measurement_s
-    if args.source == "serial" and not args.stop_on_snapshot:
+    if args.source == "serial":
         serial_duration_s = sim_config.max_measurement_s
 
     try:

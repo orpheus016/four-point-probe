@@ -30,7 +30,7 @@ class SimulationConfig:
     enable_low_pass: bool = False
     snapshot_window_s: float = 1.0
     snapshot_std_threshold_v: float = 0.0002
-    snapshot_min_duration_s: float = 1.5
+    snapshot_min_duration_s: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -63,7 +63,7 @@ class CurrentSwitchConfig:
     raise_low_v_by_stage: Tuple[float, float, float, float] = (0.3, 0.25, 0.15, 0.0)
     raise_high_v_by_stage: Tuple[float, float, float, float] = (0.35, 0.3, 0.2, 0.0)
     blanking_s: float = 0.5
-    max_settle_s: float = 1.0
+    max_settle_s: float = 1.2
     stage_match_tolerance_mA: float = 0.1
 
 
@@ -197,9 +197,21 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--evaluation-animation-output", choices=["screen", "gif", "video"], default=defaults.evaluation_animation_output)
     parser.add_argument("--evaluation-animation-fps", type=int, default=defaults.evaluation_animation_fps)
     parser.add_argument("--stop-on-snapshot", action=argparse.BooleanOptionalAction, default=defaults.stop_on_snapshot)
-    parser.add_argument("--stop-holdoff", type=float, default=defaults.stop_holdoff_s, help="minimum seconds after stage switch before stop-on-snapshot")
+    parser.add_argument(
+        "--stop-holdoff",
+        dest="stop_holdoff_s",
+        type=float,
+        default=defaults.stop_holdoff_s,
+        help="minimum seconds after stage switch before stop-on-snapshot",
+    )
     parser.add_argument("--stop-require-post-switch", action=argparse.BooleanOptionalAction, default=defaults.stop_require_post_switch, help="require a post-switch snapshot before stop-on-snapshot")
-    parser.add_argument("--stop-final-holdoff", type=float, default=defaults.stop_final_holdoff_s, help="extra holdoff (s) before stopping on the final stage")
+    parser.add_argument(
+        "--stop-final-holdoff",
+        dest="stop_final_holdoff_s",
+        type=float,
+        default=defaults.stop_final_holdoff_s,
+        help="extra holdoff (s) before stopping on the final stage",
+    )
     parser.add_argument("--output-dir", type=str, default=defaults.output_dir)
     parser.add_argument("--port", type=str, default=defaults.port)
     parser.add_argument("--baud", type=int, default=defaults.baud)
