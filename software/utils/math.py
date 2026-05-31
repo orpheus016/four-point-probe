@@ -23,6 +23,13 @@ def mean_rms(values: Iterable[float]) -> Tuple[Optional[float], Optional[float]]
 	return mean, rms
 
 
+def compute_resistance_ohm(voltage_v: float, current_mA: float, gain: float = 1.0) -> Optional[float]:
+	"""Return gain-corrected resistance in ohms or None when it cannot be computed."""
+	if current_mA <= 0.0 or gain <= 0.0:
+		return None
+	return voltage_v / (current_mA / 1000.0) * (1.0 / gain)
+
+
 def mean_std(values: Iterable[float]) -> Tuple[Optional[float], Optional[float]]:
 	"""Return (mean, std) for the provided values using population variance.
 

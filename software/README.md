@@ -88,6 +88,8 @@ The plot opens in the same process as `main`, so keep the terminal running until
    python -m software.main --source dummy --backbone running_stat --current 0.01 --resistance 1.5 \
       --snapshot-threshold 0.0004 --snapshot-window 2.0 --snapshot-min-duration 2.0
 
+   If you need gain correction in the stored resistance, add `--gain <value>`.
+
    Live plotting version of the same run:
    python -m software.main --source dummy --backbone running_stat \
       --current 0.01 --resistance 1.5 --snapshot-threshold 0.0004 \

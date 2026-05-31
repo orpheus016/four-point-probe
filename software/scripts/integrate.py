@@ -14,6 +14,7 @@ from ..command.serial_commander import SerialCommander
 from ..config.config import CurrentSwitchConfig, SerialConfig
 from ..utils.backbone_factory import create_backbone
 from ..utils.logger import CsvLogger
+from ..utils.math import compute_resistance_ohm
 from ..utils.types import Snapshot
 
 __all__ = ["create_backbone", "create_commander", "Pipeline", "run_pipeline"]
@@ -52,6 +53,7 @@ def run_pipeline(
     commander: Optional[SerialCommander] = None,
     stop_on_snapshot: bool = True,
     switch_policy: Optional[CurrentSwitchConfig] = None,
+    gain: float = 1.0,
 ):
     last_snapshot = None
     stage_start_t = None
@@ -77,9 +79,7 @@ def run_pipeline(
         if not in_blanking:
             snap = backbone.update((t, v, i))
         if snap is None and force_snapshot_due and not in_blanking:
-            resistance = None
-            if i > 0.0:
-                resistance = v / (i / 1000.0)
+            resistance = compute_resistance_ohm(v, i, gain)
             snap = Snapshot(timestamp=t, voltage=v, current_mA=i, resistance=resistance, std_dev=None)
         # log with current wall-clock timestamp and the sample elapsed time
         try:

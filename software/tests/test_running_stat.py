@@ -3,10 +3,11 @@ import math
 from software.backbones.running_stat import RunningStatBackbone
 from software.config.config import SimulationConfig
 from software.utils.backbone_factory import create_backbone
+from software.utils.math import compute_resistance_ohm
 
 
 def test_running_stat_emits_snapshot_after_stable_window():
-    backbone = RunningStatBackbone(window_samples=4, std_threshold=0.02, min_stable_samples=2)
+    backbone = RunningStatBackbone(window_samples=4, std_threshold=0.02, min_stable_samples=2, gain=2.0)
 
     samples = [
         (0.0, 0.9, 5.0),
@@ -24,7 +25,7 @@ def test_running_stat_emits_snapshot_after_stable_window():
 
     assert snapshot is not None
     assert 0.95 < snapshot.voltage < 1.15
-    expected_resistance = snapshot.voltage / (snapshot.current_mA / 1000.0)
+    expected_resistance = compute_resistance_ohm(snapshot.voltage, snapshot.current_mA, gain=2.0)
     assert math.isclose(snapshot.resistance, expected_resistance, rel_tol=1e-6)
     assert snapshot.std_dev is not None
     assert snapshot.std_dev <= 0.02
@@ -56,7 +57,7 @@ def test_running_stat_reset_allows_a_second_snapshot():
 
 
 def test_running_stat_is_available_through_factory():
-    sim_config = SimulationConfig(snapshot_window_s=1.0, snapshot_std_threshold_v=0.02, snapshot_min_duration_s=0.2)
+    sim_config = SimulationConfig(snapshot_window_s=1.0, snapshot_std_threshold_v=0.02, snapshot_min_duration_s=0.2, gain=2.0)
     backbone = create_backbone("running_stat", sim_config)
 
     assert backbone.__class__.__name__ == "RunningStatBackbone"

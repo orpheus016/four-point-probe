@@ -18,6 +18,7 @@ from ..data_source.settling import settling_signal_generator
 from ..data_source.worst_case import worst_case_signal_generator
 from .backbone_factory import create_backbone
 from .csv_replay import csv_replay_reader
+from .math import compute_resistance_ohm
 from .visualization import render_evaluation_results
 from .types import Sample, Snapshot
 
@@ -56,15 +57,13 @@ def build_source_iterator_eval(source: str, sim_config, args) -> Iterator[Sample
     raise ValueError(f"unsupported evaluation source: {source}")
 
 
-def _build_fallback_snapshot(times: List[float], voltages: List[float], currents: List[float]) -> Optional[Snapshot]:
+def _build_fallback_snapshot(times: List[float], voltages: List[float], currents: List[float], gain: float) -> Optional[Snapshot]:
     if not times:
         return None
     timestamp = times[-1]
     voltage = voltages[-1]
     current_mA = currents[-1]
-    resistance = None
-    if current_mA > 0.0:
-        resistance = voltage / (current_mA / 1000.0)
+    resistance = compute_resistance_ohm(voltage, current_mA, gain)
     return Snapshot(
         timestamp=timestamp,
         voltage=voltage,
@@ -75,10 +74,10 @@ def _build_fallback_snapshot(times: List[float], voltages: List[float], currents
     )
 
 
-def _select_decided_snapshot(snapshots: List[Snapshot], times: List[float], voltages: List[float], currents: List[float]) -> Optional[Snapshot]:
+def _select_decided_snapshot(snapshots: List[Snapshot], times: List[float], voltages: List[float], currents: List[float], gain: float) -> Optional[Snapshot]:
     if snapshots:
         return snapshots[-1]
-    return _build_fallback_snapshot(times, voltages, currents)
+    return _build_fallback_snapshot(times, voltages, currents, gain)
 
 
 def evaluate_samples(samples: Iterable[Sample], backbones: Iterable[str], sim_config, args) -> dict:
@@ -100,7 +99,7 @@ def evaluate_samples(samples: Iterable[Sample], backbones: Iterable[str], sim_co
             if snap is not None:
                 snapshots.append(snap)
 
-        decided_snapshot = _select_decided_snapshot(snapshots, times, voltages, currents)
+        decided_snapshot = _select_decided_snapshot(snapshots, times, voltages, currents, sim_config.gain)
 
         errors: List[float] = []
         refs: List[float] = []

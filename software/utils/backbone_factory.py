@@ -20,17 +20,17 @@ def create_backbone(name: str, sim_config: Any, args: Any = None) -> object:
     min_recording_samples = max(1, int(sim_config.snapshot_min_recording_s * sim_config.sample_rate_hz))
 
     if name == "stddev_window":
-        return StdDevWindowBackbone(max(2, window_samples), sim_config.snapshot_std_threshold_v, min_stable_samples, min_recording_samples)
+        return StdDevWindowBackbone(max(2, window_samples), sim_config.snapshot_std_threshold_v, min_stable_samples, min_recording_samples, gain=sim_config.gain)
 
     if name == "baseline":
-        return BaselineBackbone(max(2, window_samples), sim_config.snapshot_std_threshold_v, min_stable_samples, min_recording_samples)
+        return BaselineBackbone(max(2, window_samples), sim_config.snapshot_std_threshold_v, min_stable_samples, min_recording_samples, gain=sim_config.gain)
 
     if name == "running_stat":
-        return RunningStatBackbone(max(2, window_samples), sim_config.snapshot_std_threshold_v, min_stable_samples, min_recording_samples)
+        return RunningStatBackbone(max(2, window_samples), sim_config.snapshot_std_threshold_v, min_stable_samples, min_recording_samples, gain=sim_config.gain)
 
     if name == "hysteresis":
         enter = getattr(args, "hysteresis_enter", 1.0) if args is not None else 1.0
         exit_t = getattr(args, "hysteresis_exit", 0.8) if args is not None else 0.8
-        return HysteresisBackbone(max(1, window_samples), enter, exit_t, min_stable_samples, min_recording_samples)
+        return HysteresisBackbone(max(1, window_samples), enter, exit_t, min_stable_samples, min_recording_samples, gain=sim_config.gain)
 
     raise ValueError(f"unknown backbone: {name}")

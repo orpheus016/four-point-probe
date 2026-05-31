@@ -57,7 +57,7 @@ def test_evaluate_falls_back_to_final_sample_when_no_snapshot(monkeypatch):
 
     monkeypatch.setattr(evaluate_helpers_module, "create_backbone", lambda *args, **kwargs: FakeBackbone())
 
-    sim_config = SimulationConfig(sample_rate_hz=10.0, snapshot_window_s=1.0, snapshot_min_duration_s=0.1)
+    sim_config = SimulationConfig(sample_rate_hz=10.0, snapshot_window_s=1.0, snapshot_min_duration_s=0.1, gain=2.0)
     samples = [
         (0.0, 0.1, 10.0),
         (0.1, 0.2, 10.0),
@@ -75,6 +75,34 @@ def test_evaluate_falls_back_to_final_sample_when_no_snapshot(monkeypatch):
     assert decided.timestamp == 0.2
     assert decided.voltage == 0.3
     assert decided.current_mA == 10.0
+    assert decided.resistance == 15.0
+
+
+def test_evaluate_uses_gain_for_emitted_snapshot(monkeypatch):
+    from software.config.config import SimulationConfig
+    from software.utils import evaluate_helpers as evaluate_helpers_module
+    from software.utils.types import Snapshot
+
+    class FakeBackbone:
+        def update(self, sample):
+            return Snapshot(timestamp=sample[0], voltage=0.2, current_mA=10.0, resistance=10.0)
+
+    monkeypatch.setattr(evaluate_helpers_module, "create_backbone", lambda *args, **kwargs: FakeBackbone())
+
+    sim_config = SimulationConfig(sample_rate_hz=10.0, snapshot_window_s=1.0, snapshot_min_duration_s=0.1, gain=2.0)
+    samples = [
+        (0.0, 0.1, 10.0),
+    ]
+
+    class Args:
+        hysteresis_enter = 1.0
+        hysteresis_exit = 0.8
+
+    data = evaluate_helpers_module.evaluate_samples(samples, ["baseline"], sim_config, Args())
+    decided = data["results"]["baseline"]["decided_snapshot"]
+
+    assert decided is not None
+    assert decided.resistance == 10.0
 
 
 def test_backbone_styles_are_distinct():

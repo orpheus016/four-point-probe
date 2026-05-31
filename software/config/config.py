@@ -13,6 +13,7 @@ class SimulationConfig:
     window_seconds: float = 10.0
     snapshot_min_recording_s: float = 1.0
     max_measurement_s: float = 5.0
+    gain: float = 1.0
     current_source_a: float = 0.010
     sample_resistance_ohm: float = 1.0
     transient_model: str = "first_order"
@@ -82,6 +83,7 @@ class CLIConfig:
     window_seconds: float = SimulationConfig.window_seconds
     snapshot_min_recording_s: float = SimulationConfig.snapshot_min_recording_s
     max_measurement_s: float = SimulationConfig.max_measurement_s
+    gain: float = SimulationConfig.gain
     current_source_a: float = SimulationConfig.current_source_a
     sample_resistance_ohm: float = SimulationConfig.sample_resistance_ohm
     transient_model: str = SimulationConfig.transient_model
@@ -163,6 +165,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--window-seconds", type=float, default=defaults.window_seconds)
     parser.add_argument("--snapshot-min-recording", type=float, default=defaults.snapshot_min_recording_s)
     parser.add_argument("--max-measurement", type=float, default=defaults.max_measurement_s)
+    parser.add_argument("--gain", type=float, default=defaults.gain)
     parser.add_argument("--current", type=float, default=defaults.current_source_a)
     parser.add_argument("--resistance", type=float, default=defaults.sample_resistance_ohm)
     parser.add_argument("--transient-model", choices=["first_order", "underdamped"], default=defaults.transient_model)
@@ -239,6 +242,7 @@ def build_simulation_config(args: argparse.Namespace) -> SimulationConfig:
         window_seconds=args.window_seconds,
         snapshot_min_recording_s=args.snapshot_min_recording,
         max_measurement_s=args.max_measurement,
+        gain=args.gain,
         current_source_a=args.current,
         sample_resistance_ohm=args.resistance,
         transient_model=args.transient_model,

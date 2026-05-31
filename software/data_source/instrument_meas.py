@@ -17,6 +17,7 @@ SNAPSHOT_WINDOW = 20
 MIN_SNAPSHOT_SEND_INTERVAL_S = 0.0
 
 from ..utils.math import mean_std
+from ..utils.math import compute_resistance_ohm
 
 
 def main():
@@ -92,8 +93,8 @@ def main():
                     continue
 
                 if std <= SNAPSHOT_STD_THRESHOLD_V and (now - last_snapshot_send) >= MIN_SNAPSHOT_SEND_INTERVAL_S:
-                    if current_mA > 0.0:
-                        resistance = mean / (current_mA / 1000.0)
+                    resistance = compute_resistance_ohm(mean, current_mA)
+                    if resistance is not None:
                         ser.write(f"{resistance:.5f}\n".encode('utf-8'))
                         # Debug Resistance
                         print(f"Sending R={resistance:.5f} (std={std:.6f})")

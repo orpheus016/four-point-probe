@@ -7,6 +7,7 @@ from math import sqrt
 from typing import Deque, Optional
 
 from .base import BaseBackbone
+from ..utils.math import compute_resistance_ohm
 from ..utils.types import Sample, Snapshot
 
 
@@ -24,6 +25,7 @@ class BaselineBackbone(BaseBackbone):
         std_threshold: float,
         min_stable_samples: int,
         min_recording_samples: int = 1,
+        gain: float = 1.0,
     ) -> None:
         super().__init__(min_recording_samples=min_recording_samples)
         if window_samples < 2:
@@ -36,6 +38,7 @@ class BaselineBackbone(BaseBackbone):
         self._window_samples = window_samples
         self._std_threshold = std_threshold
         self._min_stable_samples = min_stable_samples
+        self._gain = gain
 
         self._window: Deque[float] = deque(maxlen=window_samples)
         self._sum = 0.0
@@ -78,9 +81,7 @@ class BaselineBackbone(BaseBackbone):
         if self._stable_count < self._min_stable_samples or not self._has_min_recording() or self._snapshot_emitted:
             return None
 
-        resistance = None
-        if current_mA > 0.0:
-            resistance = mean / (current_mA / 1000.0)
+        resistance = compute_resistance_ohm(mean, current_mA, self._gain)
 
         # emit snapshot (timestamp of latest sample)
         self._snapshot_emitted = True

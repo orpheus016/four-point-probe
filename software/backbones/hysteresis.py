@@ -7,6 +7,7 @@ from math import sqrt
 from typing import Deque, Optional
 
 from .base import BaseBackbone
+from ..utils.math import compute_resistance_ohm
 from ..utils.types import Sample, Snapshot
 
 
@@ -25,6 +26,7 @@ class HysteresisBackbone(BaseBackbone):
         exit_threshold: float,
         min_stable_samples: int,
         min_recording_samples: int = 1,
+        gain: float = 1.0,
     ) -> None:
         super().__init__(min_recording_samples=min_recording_samples)
         if window_samples < 1:
@@ -38,6 +40,7 @@ class HysteresisBackbone(BaseBackbone):
         self._enter_threshold = enter_threshold
         self._exit_threshold = exit_threshold
         self._min_stable_samples = min_stable_samples
+        self._gain = gain
 
         self._window: Deque[float] = deque(maxlen=window_samples)
         self._sum = 0.0
@@ -80,9 +83,7 @@ class HysteresisBackbone(BaseBackbone):
                 if not self._has_min_recording():
                     return None
                 self._in_snapshot = True
-                resistance = None
-                if current_mA > 0.0:
-                    resistance = mean / (current_mA / 1000.0)
+                resistance = compute_resistance_ohm(mean, current_mA, self._gain)
                 return Snapshot(
                     timestamp=timestamp,
                     voltage=mean,

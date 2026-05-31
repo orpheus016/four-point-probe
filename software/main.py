@@ -7,6 +7,9 @@ from collections import deque
 from datetime import datetime
 from typing import Deque, Optional
 
+import os
+from pathlib import Path
+
 from .config.config import build_arg_parser, build_serial_config, build_simulation_config, CurrentSwitchConfig
 from .data_source.ads1256 import ads1256_reader
 from .command.serial_commander import SerialCommander
@@ -16,11 +19,9 @@ from .data_source.settling import settling_signal_generator
 from .data_source.worst_case import worst_case_signal_generator
 from .utils.filters import LowPassFilter, MovingAverageFilter
 from .utils.logger import CsvLogger
-import os
-from pathlib import Path
 from .utils.types import Sample, Snapshot
 from .utils.backbone_factory import create_backbone
-from .utils.math import mean_rms, mean_std
+from .utils.math import compute_resistance_ohm, mean_rms, mean_std
 from .utils.evaluate_helpers import evaluate_samples
 
 
@@ -41,13 +42,11 @@ def _build_run_name(now: datetime) -> str:
     return f"volt_log_{now.strftime('%Y%m%d_%H%M%S')}"
 
 
-def _forced_snapshot_from_buffer(elapsed_s: float, current_mA: float, buffer: Deque[float]) -> Optional[Snapshot]:
+def _forced_snapshot_from_buffer(elapsed_s: float, current_mA: float, buffer: Deque[float], gain: float) -> Optional[Snapshot]:
     mean, std_dev = mean_std(buffer)
     if mean is None:
         return None
-    resistance = None
-    if current_mA > 0.0:
-        resistance = mean / (current_mA / 1000.0)
+    resistance = compute_resistance_ohm(mean, current_mA, gain)
     return Snapshot(
         timestamp=elapsed_s,
         voltage=mean,
@@ -211,7 +210,7 @@ def main() -> None:
                     primary_snapshot = None
 
                 if primary_snapshot is None and force_snapshot_due and not in_blanking:
-                    primary_snapshot = _forced_snapshot_from_buffer(elapsed_sample_s, current_mA, buffer)
+                    primary_snapshot = _forced_snapshot_from_buffer(elapsed_sample_s, current_mA, buffer, sim_config.gain)
                     if primary_snapshot is not None:
                         snapshots_by_backbone[primary_backbone_name].append(primary_snapshot)
                         last_snapshots[primary_backbone_name] = primary_snapshot
@@ -267,7 +266,7 @@ def main() -> None:
                     snapshot = backbone_instances[primary_backbone_name].update((elapsed_sample_s, filtered, current_mA))
 
                 if snapshot is None and force_snapshot_due and not in_blanking:
-                    snapshot = _forced_snapshot_from_buffer(elapsed_sample_s, current_mA, buffer)
+                    snapshot = _forced_snapshot_from_buffer(elapsed_sample_s, current_mA, buffer, sim_config.gain)
 
                 if snapshot is not None:
                     stage_snapshot_seen = True
