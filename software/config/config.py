@@ -78,6 +78,15 @@ class OutputConfig:
 class CLIConfig:
     source: str = "dummy"
     backbone: str = "running_stat"
+    bocd_hazard_rate: float = 1.0 / 200.0
+    bocd_mean0: float = 0.0
+    bocd_var0: float = 1.0
+    bocd_varx: float = 1e-6
+    bocd_cp_reset_threshold: int = 5
+    di_dt_threshold: float = 0.005
+    di_it_threshold: float = 0.05
+    di_leakage_factor: float = 0.9
+    di_iir_window: int = 16
     csv_path: str = "software/output/testbench/input.csv"
     sample_rate_hz: float = SimulationConfig.sample_rate_hz
     window_seconds: float = SimulationConfig.window_seconds
@@ -133,7 +142,7 @@ class CLIConfig:
     # Evaluate script specific defaults
     input: str = "software/output/testbench"
     out: str = "software/output/evaluate"
-    backbones: str = "stddev_window,baseline,hysteresis"
+    backbones: str = "stddev_window,baseline,hysteresis,derivative_integration"
     show: bool = False
     filename: str = ""
 
@@ -159,7 +168,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     defaults = CLIConfig()
     parser = argparse.ArgumentParser(description="Simulated ADS1256 voltage acquisition")
     parser.add_argument("--source", choices=["dummy", "serial", "csv", "settling", "worst_case"], default=defaults.source)
-    parser.add_argument("--backbone", choices=["running_stat", "stddev_window", "baseline", "hysteresis"], default=defaults.backbone)
+    parser.add_argument("--backbone", choices=["running_stat", "stddev_window", "baseline", "hysteresis", "bocd", "derivative_integration"], default=defaults.backbone)
     parser.add_argument("--csv-path", type=str, default=defaults.csv_path)
     parser.add_argument("--sample-rate", type=float, default=defaults.sample_rate_hz)
     parser.add_argument("--window-seconds", type=float, default=defaults.window_seconds)
@@ -187,6 +196,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
     # Hysteresis backbone tuning
     parser.add_argument("--hysteresis-enter", type=float, default=1.0, help="enter threshold (V) for hysteresis backbone")
     parser.add_argument("--hysteresis-exit", type=float, default=0.8, help="exit threshold (V) for hysteresis backbone")
+    # BOCD backbone tuning
+    parser.add_argument("--bocd-hazard-rate", type=float, default=defaults.bocd_hazard_rate, dest="bocd_hazard_rate", help="prior changepoint probability per sample for BOCD backbone")
+    parser.add_argument("--bocd-mean0", type=float, default=defaults.bocd_mean0, dest="bocd_mean0", help="prior mean on the signal level for BOCD backbone")
+    parser.add_argument("--bocd-var0", type=float, default=defaults.bocd_var0, dest="bocd_var0", help="prior variance on the signal mean for BOCD backbone")
+    parser.add_argument("--bocd-varx", type=float, default=defaults.bocd_varx, dest="bocd_varx", help="assumed observation noise variance for BOCD backbone")
+    parser.add_argument("--bocd-cp-reset-threshold", type=int, default=defaults.bocd_cp_reset_threshold, dest="bocd_cp_reset_threshold", help="MAP run-length must fall below this to confirm a changepoint (BOCD backbone)")
+    # Derivative Integration backbone tuning
+    parser.add_argument("--di-derivative-threshold", type=float, default=defaults.di_dt_threshold, dest="di_dt_threshold", help="minimum delta to trigger integration (DI backbone)")
+    parser.add_argument("--di-integration-threshold", type=float, default=defaults.di_it_threshold, dest="di_it_threshold", help="accumulated value required to flag detection (DI backbone)")
+    parser.add_argument("--di-leakage-factor", type=float, default=defaults.di_leakage_factor, dest="di_leakage_factor", help="dissipation rate (DI backbone)")
+    parser.add_argument("--di-iir-window", type=int, default=defaults.di_iir_window, dest="di_iir_window", help="window size for smoothing (DI backbone)")
     parser.add_argument("--snapshot-mode", choices=["first", "continuous"], default=defaults.snapshot_mode)
     parser.add_argument("--plot-mode", choices=["comparison", "full"], default=defaults.plot_mode)
     parser.add_argument("--live-plot", action=argparse.BooleanOptionalAction, default=defaults.live_plot)

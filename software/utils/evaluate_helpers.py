@@ -99,7 +99,10 @@ def evaluate_samples(samples: Iterable[Sample], backbones: Iterable[str], sim_co
             if snap is not None:
                 snapshots.append(snap)
 
-        decided_snapshot = _select_decided_snapshot(snapshots, times, voltages, currents, sim_config.gain)
+        if hasattr(bb, "best_snapshot") and bb.best_snapshot is not None:
+            decided_snapshot = bb.best_snapshot
+        else:
+            decided_snapshot = _select_decided_snapshot(snapshots, times, voltages, currents, sim_config.gain)
 
         errors: List[float] = []
         refs: List[float] = []

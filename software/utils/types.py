@@ -18,3 +18,4 @@ class Snapshot:
     resistance: Optional[float] = None
     std_dev: Optional[float] = None
     stage: Optional[str] = None
+    best_run_length: Optional[int] = None

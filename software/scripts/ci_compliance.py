@@ -1,4 +1,4 @@
-"""Lightweight compliance checker to enforce core rules from copilot-instructions.md.
+"""Lightweight compliance checker to enforce core rules from AGENTS.md.
 
 Checks performed:
 - `Snapshot` dataclass exists in `software/utils/types.py`.
@@ -97,14 +97,14 @@ def check_no_duplicates() -> bool:
 
 
 def check_instructions_shape() -> bool:
-    """Quick sanity check that copilot instructions match the current structure.
+    """Quick sanity check that AGENTS match the current structure.
 
     This is intentionally lightweight: it does not judge style, just validates
     that key paths and architecture claims line up with the repository.
     """
-    instructions = ROOT / "copilot-instructions.md"
+    instructions = ROOT / "AGENTS.md"
     if not instructions.exists():
-        print("ERROR: copilot-instructions.md not found")
+        print("ERROR: AGENTS.md not found")
         return False
     text = instructions.read_text(encoding="utf-8")
     required_phrases = [
@@ -116,7 +116,7 @@ def check_instructions_shape() -> bool:
     ]
     missing = [phrase for phrase in required_phrases if phrase not in text]
     if missing:
-        print("ERROR: copilot-instructions.md is missing required architecture references: " + ", ".join(missing))
+        print("ERROR: AGENTS.md is missing required architecture references: " + ", ".join(missing))
         return False
     return True
 
